@@ -2,6 +2,7 @@
 /dist
 /node_modules
 /build
+/.agents
 
 # Logs
 logs
@@ -30,6 +31,9 @@ lerna-debug.log*
 
 # IDE - VSCode
 .vscode/*
+.vscode/
+.idea/
+.DS_Store
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json

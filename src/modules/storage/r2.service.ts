@@ -6,8 +6,6 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
  * StorageService — wraps Supabase Storage for deliverable file hosting.
  *
  * Bucket: 'deliverables' (create in Supabase dashboard → Storage, set to private).
- * Public interface is identical to the previous R2 implementation so
- * DeliverablesService requires no changes.
  */
 
 const BUCKET = 'deliverables';
