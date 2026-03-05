@@ -3,6 +3,7 @@ import {
   Logger,
   BadRequestException,
   ServiceUnavailableException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AgentsRepository } from './agents.repository';
@@ -14,46 +15,73 @@ import {
   ConfirmRegistrationResponse,
   HealthCheckResponse,
 } from '../../common/interfaces';
-import {
-  SolanaSDK,
-  IPFSClient,
-  buildRegistrationFileJson,
-  ServiceType,
-  EndpointCrawler,
-} from '8004-solana';
 import { Keypair, PublicKey } from '@solana/web3.js';
 import * as crypto from 'crypto';
 
 /**
  * Business logic for agent management.
  * Handles registration (8004 NFT), health checks, and CRUD operations.
+ *
+ * NOTE: 8004-solana is a pure ESM package. It cannot be statically require()'d
+ * in a CJS bundle (NestJS compiles to CJS by default). We load it once via
+ * dynamic import() in onModuleInit — NestJS awaits this hook before the module
+ * is marked ready, so all handlers are guaranteed to have a live SDK instance.
  */
 @Injectable()
-export class AgentsService {
+export class AgentsService implements OnModuleInit {
   private readonly logger = new Logger(AgentsService.name);
 
-  /** 8004 Solana SDK — used for registration tx building and health checks. */
-  private readonly sdk: SolanaSDK;
+  /** 8004 Solana SDK — initialised in onModuleInit via dynamic ESM import */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private sdk: any;
 
-  /** IPFS client — used to pin Open Agentic Schema Framwork (OASF) metadata JSON during registration. */
-  private readonly ipfs: IPFSClient;
+  /** IPFS client — initialised in onModuleInit via dynamic ESM import */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private ipfs: any;
+
+  /** ServiceType enum from 8004-solana — stored after dynamic import */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private ServiceType: any;
+
+  /** EndpointCrawler class from 8004-solana — stored after dynamic import */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private EndpointCrawlerClass: any;
+
+  /** buildRegistrationFileJson fn from 8004-solana — stored after dynamic import */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private buildRegistrationFileJson: any;
 
   constructor(
     private readonly agentsRepository: AgentsRepository,
     private readonly config: ConfigService,
-  ) {
+  ) {}
+
+  /**
+   * Dynamic import of the ESM-only 8004-solana package.
+   * NestJS calls this after DI is fully resolved — this.config is available here.
+   * All requests are held until this resolves.
+   */
+  async onModuleInit(): Promise<void> {
+    const lib = await import('8004-solana');
+
     const rpcUrl = this.config.get<string>('solana.rpcUrl');
     const pinataJwt = this.config.get<string>('pinataJwt');
 
-    this.sdk = new SolanaSDK({
+    this.sdk = new lib.SolanaSDK({
       cluster: 'devnet',
       rpcUrl,
     });
 
-    this.ipfs = new IPFSClient({
+    this.ipfs = new lib.IPFSClient({
       pinataEnabled: true,
       pinataJwt: pinataJwt ?? '',
     });
+
+    this.ServiceType = lib.ServiceType;
+    this.EndpointCrawlerClass = lib.EndpointCrawler;
+    this.buildRegistrationFileJson = lib.buildRegistrationFileJson;
+
+    this.logger.log('8004-solana SDK and IPFS client initialised');
   }
 
   /**
@@ -77,7 +105,7 @@ export class AgentsService {
     this.logger.log(`registerAgent for owner ${ownerPubkey}`);
 
     /* Step 1: Try to crawl MCP capabilities — non-fatal on null return or throw */
-    const crawler = new EndpointCrawler(8000);
+    const crawler = new this.EndpointCrawlerClass(8000);
     let mcpCapabilities: Record<string, unknown> = {};
     try {
       const mcp = await crawler.fetchMcpCapabilities(dto.webhookUrl);
@@ -90,17 +118,17 @@ export class AgentsService {
     }
 
     /* Step 2: Declare services — always A2A; add MCP if the crawler found tools */
-    const services = [{ type: ServiceType.A2A, value: dto.webhookUrl }];
+    const services = [{ type: this.ServiceType.A2A, value: dto.webhookUrl }];
     if (mcpCapabilities['mcpTools']) {
-      services.push({ type: ServiceType.MCP, value: dto.webhookUrl });
+      services.push({ type: this.ServiceType.MCP, value: dto.webhookUrl });
     }
 
     /*
      * Build OASF metadata JSON.
-     * Fix: use dto.skills (OASF skills) and dto.domains (OASF domains) directly.
+     * dto.skills (OASF skills) and dto.domains (OASF domains) map directly.
      * dto.specialisationTags maps to the DB `specialisation_tags` column, not OASF skills.
      */
-    const metadata = buildRegistrationFileJson({
+    const metadata = this.buildRegistrationFileJson({
       name: dto.name,
       description: dto.description as string,
       services,
@@ -124,7 +152,7 @@ export class AgentsService {
       signer: ownerPubkeyObj,
       assetPubkey: assetKeypair.publicKey,
       atomEnabled: true,
-    } as Parameters<typeof this.sdk.registerAgent>[1]);
+    });
 
     /* Step 6: Generate a 32-byte hex HMAC secret for webhook signature verification */
     const webhookSecret = crypto.randomBytes(32).toString('hex');
