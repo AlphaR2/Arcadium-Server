@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsArray, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
@@ -35,10 +35,4 @@ export class UpdateUserDto {
   @IsString({ each: true })
   @ApiPropertyOptional({ description: 'Preferred bounty category slugs for feed personalisation', type: [String] })
   preferred_categories?: string[];
-
-  /** Set to true once the user completes the in-app onboarding flow. */
-  @IsOptional()
-  @IsBoolean()
-  @ApiPropertyOptional({ description: 'True once the user has completed onboarding' })
-  onboarding_completed?: boolean;
 }

@@ -49,7 +49,10 @@ export class UsersService {
   async update(id: string, updates: UpdateUserDto): Promise<UserEntity> {
     const { data, error } = await this.supabase
       .from('users')
-      .update(updates as Record<string, unknown>)
+      .update({
+        ...updates,
+        onboarding_completed: true,
+      } as Record<string, unknown>)
       .eq('id', id)
       .select('*')
       .single();
