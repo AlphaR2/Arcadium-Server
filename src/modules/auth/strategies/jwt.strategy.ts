@@ -14,25 +14,23 @@ export interface JwtPayload {
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private config: ConfigService) {
-    const publicKey = config
-      .get<string>('JWT_PUBLIC_KEY')
-      ?.replace(/\\n/g, '\n');
+    const publicKey = config.get<string>('jwt.publicKey');
 
     if (!publicKey) {
-      throw new Error('JWT_PUBLIC_KEY is missing from environment variables');
+      throw new Error('JWT public key missing in configuration');
     }
 
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      publicKey, 
+      secretOrKey: publicKey,
       algorithms: ['RS256'],
     });
   }
 
   validate(payload: JwtPayload): JwtPayload {
     if (!payload?.sub) {
-      throw new UnauthorizedException('Invalid token payload');
+      throw new UnauthorizedException();
     }
 
     return payload;
