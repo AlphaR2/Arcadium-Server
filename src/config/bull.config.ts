@@ -5,8 +5,10 @@ export const bullConfig = {
   imports: [ConfigModule],
   inject: [ConfigService],
   useFactory: (configService: ConfigService) => {
-    const rawUrl =
-      configService.get<string>('redis.url') ?? 'redis://localhost:6379';
+    // Strip any accidental surrounding quotes that can sneak in via Railway/env editors
+    const rawUrl = (
+      configService.get<string>('redis.url') ?? 'redis://localhost:6379'
+    ).trim().replace(/^["']|["']$/g, '');
 
     // Parse the redis:// or rediss:// URL
     const parsed = new URL(rawUrl);
