@@ -1,3 +1,14 @@
+const formatKey = (key: string | undefined): string => {
+  if (!key) return '';
+  // Trim and strip outer quotes if they exist (common when pasting into some UI env var editors)
+  let k = key.trim();
+  if (k.startsWith('"') && k.endsWith('"')) {
+    k = k.substring(1, k.length - 1);
+  }
+  // Replace literal '\n' with actual newlines
+  return k.replace(/\\n/g, '\n');
+};
+
 export default () => ({
   port: parseInt(process.env.PORT ?? '3000', 10),
 
@@ -32,14 +43,8 @@ export default () => ({
    * Replace \n with actual line breaks so RSA keys work in Railway / Docker env vars
    */
   jwt: {
-    privateKey: process.env.JWT_PRIVATE_KEY
-      ? process.env.JWT_PRIVATE_KEY.replace(/\\n/g, '\n')
-      : '',
-
-    publicKey: process.env.JWT_PUBLIC_KEY
-      ? process.env.JWT_PUBLIC_KEY.replace(/\\n/g, '\n')
-      : '',
-
+    privateKey: formatKey(process.env.JWT_PRIVATE_KEY),
+    publicKey: formatKey(process.env.JWT_PUBLIC_KEY),
     expiresIn: '3d',
   },
 
