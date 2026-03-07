@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   address,
   appendTransactionMessageInstruction,
+  Blockhash,
   compileTransaction,
   createKeyPairSignerFromBytes,
   createNoopSigner,
@@ -57,11 +58,19 @@ const TOKEN_PROGRAM_BYTES = new Uint8Array([
 const ATA_PROGRAM_ADDRESS =
   'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL' as Address;
 
+/** Cached blockhash to avoid hammering the RPC on every tx build. */
+interface BlockhashCache {
+  value: { blockhash: Blockhash; lastValidBlockHeight: bigint };
+  fetchedAt: number; // Date.now()
+}
+
 @Injectable()
 export class EscrowService implements OnModuleInit {
   private readonly logger = new Logger(EscrowService.name);
   private readonly rpc: Rpc<SolanaRpcApi>;
   private authoritySigner!: KeyPairSigner;
+  private blockhashCache: BlockhashCache | null = null;
+  private static readonly BLOCKHASH_TTL_MS = 30_000; // 30 s — well within the ~90 s validity window
 
   constructor(private readonly config: ConfigService) {
     this.rpc = createSolanaRpc(this.config.get<string>('solana.rpcUrl') ?? '');
@@ -78,6 +87,26 @@ export class EscrowService implements OnModuleInit {
     } catch {
       this.logger.warn('Authority private key not configured or invalid');
     }
+  }
+
+  /**
+   * Returns a recent blockhash, using a 30-second in-memory cache to avoid
+   * hammering Helius (free tier rate-limits at ~10 req/s).
+   */
+  private async getCachedBlockhash(): Promise<{
+    blockhash: Blockhash;
+    lastValidBlockHeight: bigint;
+  }> {
+    const now = Date.now();
+    if (
+      this.blockhashCache &&
+      now - this.blockhashCache.fetchedAt < EscrowService.BLOCKHASH_TTL_MS
+    ) {
+      return this.blockhashCache.value;
+    }
+    const { value } = await this.rpc.getLatestBlockhash().send();
+    this.blockhashCache = { value, fetchedAt: now };
+    return value;
   }
 
   /** Derives the ATA for a given wallet + mint using the ATA program. */
@@ -117,9 +146,7 @@ export class EscrowService implements OnModuleInit {
       expiry: BigInt(params.expiry),
     });
 
-    const { value: latestBlockhash } = await this.rpc
-      .getLatestBlockhash()
-      .send();
+    const latestBlockhash = await this.getCachedBlockhash();
 
     const txMessage = pipe(
       createTransactionMessage({ version: 0 }),
@@ -135,7 +162,9 @@ export class EscrowService implements OnModuleInit {
      * would throw here because the noop signer leaves the client slot empty.
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return getBase64EncodedWireTransaction(compileTransaction(txMessage) as any);
+    return getBase64EncodedWireTransaction(
+      compileTransaction(txMessage) as any,
+    );
   }
 
   /**
@@ -166,9 +195,7 @@ export class EscrowService implements OnModuleInit {
       jobId: new Uint8Array(params.jobIdBytes),
     });
 
-    const { value: latestBlockhash } = await this.rpc
-      .getLatestBlockhash()
-      .send();
+    const latestBlockhash = await this.getCachedBlockhash();
 
     const txMessage = pipe(
       createTransactionMessage({ version: 0 }),
@@ -178,7 +205,9 @@ export class EscrowService implements OnModuleInit {
     );
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return getBase64EncodedWireTransaction(compileTransaction(txMessage) as any);
+    return getBase64EncodedWireTransaction(
+      compileTransaction(txMessage) as any,
+    );
   }
 
   /**
@@ -198,9 +227,7 @@ export class EscrowService implements OnModuleInit {
       agentOwner: params.agentOwner ? address(params.agentOwner) : null,
     });
 
-    const { value: latestBlockhash } = await this.rpc
-      .getLatestBlockhash()
-      .send();
+    const latestBlockhash = await this.getCachedBlockhash();
 
     const txMessage = pipe(
       createTransactionMessage({ version: 0 }),
@@ -225,15 +252,23 @@ export class EscrowService implements OnModuleInit {
    * Recipient is the client's own USDC ATA — full refund, no fee.
    * Returns base64-encoded wire transaction for Phantom to sign + broadcast.
    */
-  async buildRefundTx(params: { jobIdBytes: Buffer; clientPubkey: string }): Promise<string> {
+  async buildRefundTx(params: {
+    jobIdBytes: Buffer;
+    clientPubkey: string;
+  }): Promise<string> {
     this.logger.log(`buildRefundTx client=${params.clientPubkey}`);
 
     const clientNoop = createNoopSigner(address(params.clientPubkey));
     const usdcMint = this.config.get<string>('solana.usdcMint')!;
-    const treasuryTokenAccount = this.config.get<string>('solana.treasuryTokenAccount')!;
+    const treasuryTokenAccount = this.config.get<string>(
+      'solana.treasuryTokenAccount',
+    )!;
 
     /* For UnFulfilled path: recipient = client's own USDC ATA */
-    const clientTokenAccount = await this.deriveAta(params.clientPubkey, usdcMint);
+    const clientTokenAccount = await this.deriveAta(
+      params.clientPubkey,
+      usdcMint,
+    );
 
     const ix = await getSettleEscrowInstructionAsync({
       client: clientNoop,
@@ -243,7 +278,7 @@ export class EscrowService implements OnModuleInit {
       jobId: new Uint8Array(params.jobIdBytes),
     });
 
-    const { value: latestBlockhash } = await this.rpc.getLatestBlockhash().send();
+    const latestBlockhash = await this.getCachedBlockhash();
 
     const txMessage = pipe(
       createTransactionMessage({ version: 0 }),
@@ -253,6 +288,8 @@ export class EscrowService implements OnModuleInit {
     );
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return getBase64EncodedWireTransaction(compileTransaction(txMessage) as any);
+    return getBase64EncodedWireTransaction(
+      compileTransaction(txMessage) as any,
+    );
   }
 }

@@ -1,4 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { BountiesRepository } from './bounties.repository';
 import { CreateBountyDto } from './dto/create-bounty.dto';
 import { EscrowService } from '../escrow/escrow.service';
@@ -28,6 +35,7 @@ export class BountiesService {
   constructor(
     private readonly bountiesRepository: BountiesRepository,
     private readonly escrowService: EscrowService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -90,5 +98,105 @@ export class BountiesService {
   /** Fetches a single bounty by UUID. Throws if not found. */
   async findById(id: string): Promise<BountyEntity> {
     return this.bountiesRepository.findById(id);
+  }
+
+  /**
+   * Confirms that the createEscrow transaction has landed on-chain and
+   * transitions the bounty from 'draft' → 'open'.
+   *
+   * Called by the frontend immediately after the client signs and broadcasts
+   * the tx returned from POST /bounties. Does not depend on the Helius webhook.
+   *
+   * Verifies on-chain that:
+   *   - The transaction is confirmed with no errors
+   *   - It contains a createEscrow instruction from the escrow program
+   * Then stores the escrowVaultState PDA address as escrow_pda.
+   *
+   * Idempotent: if the bounty is already open (Helius fired first), returns as-is.
+   */
+  async confirmEscrow(
+    bountyId: string,
+    signature: string,
+    clientId: string,
+  ): Promise<BountyEntity> {
+    const bounty = await this.bountiesRepository.findById(bountyId);
+
+    if (bounty.client_id !== clientId) {
+      throw new UnauthorizedException('You are not the client for this bounty');
+    }
+
+    /* Idempotent — Helius may have already confirmed it */
+    if (bounty.state !== 'draft') {
+      this.logger.log(`Bounty ${bountyId} already ${bounty.state} — skipping confirm`);
+      return bounty;
+    }
+
+    const rpcUrl = this.configService.get<string>('solana.rpcUrl') ?? '';
+    const escrowProgramId = this.configService.get<string>('solana.escrowProgramId') ?? '';
+
+    const escrowPda = await this.getEscrowPdaFromTx(signature, rpcUrl, escrowProgramId);
+
+    const updated = await this.bountiesRepository.update(bountyId, {
+      state: 'open',
+      escrow_pda: escrowPda,
+    });
+
+    this.logger.log(`Bounty ${bountyId} confirmed → open | escrow_pda=${escrowPda}`);
+    return updated;
+  }
+
+  /**
+   * Fetches a finalized transaction from the RPC and extracts the
+   * escrowVaultState PDA from the createEscrow instruction accounts.
+   *
+   * Account order in createEscrow (from generated client):
+   *   [0] client, [1] config, [2] escrowVaultState, [3] escrowVault,
+   *   [4] tokenMint, [5] clientTokenAccount, [6] tokenProgram, [7] systemProgram
+   */
+  private async getEscrowPdaFromTx(
+    signature: string,
+    rpcUrl: string,
+    escrowProgramId: string,
+  ): Promise<string> {
+    /* Dynamic import keeps @solana/web3.js v1 out of the NestJS CJS/ESM boundary */
+    const { Connection } = await import('@solana/web3.js');
+    const connection = new Connection(rpcUrl, 'confirmed');
+
+    const tx = await connection.getParsedTransaction(signature, {
+      commitment: 'confirmed',
+      maxSupportedTransactionVersion: 0,
+    });
+
+    if (!tx) {
+      throw new NotFoundException(
+        'Transaction not found — it may still be propagating. Wait a few seconds and try again.',
+      );
+    }
+    if (tx.meta?.err) {
+      throw new BadRequestException(
+        `Transaction failed on-chain: ${JSON.stringify(tx.meta.err)}`,
+      );
+    }
+
+    /* Find the createEscrow instruction by matching the escrow program ID */
+    const ix = tx.transaction.message.instructions.find(
+      (i) => i.programId.toBase58() === escrowProgramId,
+    );
+
+    if (!ix || !('accounts' in ix)) {
+      throw new BadRequestException(
+        'Transaction does not contain a createEscrow instruction for this program',
+      );
+    }
+
+    const accounts = (ix as { accounts: { toBase58(): string }[] }).accounts;
+    if (!accounts || accounts.length < 3) {
+      throw new BadRequestException(
+        'Unexpected instruction format — cannot extract escrow PDA',
+      );
+    }
+
+    /* accounts[2] = escrowVaultState */
+    return accounts[2].toBase58();
   }
 }

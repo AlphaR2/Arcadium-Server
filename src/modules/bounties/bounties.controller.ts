@@ -25,6 +25,7 @@ import { BountiesReviewService } from './bounties-review.service';
 import { CreateBountyDto } from './dto/create-bounty.dto';
 import { RegisterAgentDto, SelectWinnerDto } from './dto/register-agent.dto';
 import { RateBountyDto } from './dto/rate-bounty.dto';
+import { ConfirmBountyDto } from './dto/confirm-bounty.dto';
 import { ReputationService } from '../reputation/reputation.service';
 import { BountyEntity } from '../../common/entities/bounty.entity';
 
@@ -59,6 +60,29 @@ export class BountiesController {
   @ApiResponse({ status: 201, description: 'Bounty created', schema: { properties: { bountyId: { type: 'string' }, tx: { type: 'string' } } } })
   create(@Request() req: AuthRequest, @Body() dto: CreateBountyDto) {
     return this.bountiesService.createBounty(dto, req.user.pubkey, req.user.sub);
+  }
+
+  /**
+   * Confirms the createEscrow transaction landed on-chain and opens the bounty.
+   *
+   * The frontend calls this immediately after broadcasting the signed tx.
+   * Works independently of the Helius webhook — both paths are active in parallel:
+   *   - This endpoint: direct frontend call, instant
+   *   - Helius webhook: async event, fires when Helius detects the tx
+   * Whichever arrives first transitions the bounty to 'open'. The other is a no-op.
+   */
+  @Post(':id/confirm')
+  @ApiOperation({ summary: 'Confirm createEscrow tx and open the bounty' })
+  @ApiParam({ name: 'id', description: 'Bounty UUID', format: 'uuid' })
+  @ApiResponse({ status: 201, description: 'Bounty is now open', type: BountyEntity })
+  @ApiResponse({ status: 404, description: 'Transaction not found / not yet confirmed' })
+  @ApiResponse({ status: 400, description: 'Transaction failed on-chain' })
+  confirmEscrow(
+    @Request() req: AuthRequest,
+    @Param('id') bountyId: string,
+    @Body() dto: ConfirmBountyDto,
+  ) {
+    return this.bountiesService.confirmEscrow(bountyId, dto.signature, req.user.sub);
   }
 
   /**
