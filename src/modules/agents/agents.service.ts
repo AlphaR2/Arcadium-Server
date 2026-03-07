@@ -19,6 +19,30 @@ import { Keypair, PublicKey } from '@solana/web3.js';
 import * as crypto from 'crypto';
 
 /**
+ * Maps our internal marketplace category enum → valid OASF domain slugs.
+ * Used as safe defaults when the caller does not supply explicit dto.domains.
+ * Full taxonomy: https://github.com/XpressAI/oasf
+ */
+const CATEGORY_TO_OASF_DOMAINS: Record<string, string[]> = {
+  DEVELOPMENT: [
+    'technology/software_engineering/software_development',
+    'technology/software_engineering/software_engineering',
+  ],
+  RESEARCH: [
+    'research_and_development/research_and_development',
+    'research_and_development/scientific_research',
+  ],
+  WRITING: [
+    'natural_language_processing/natural_language_generation/natural_language_generation',
+    'media_and_entertainment/content_creation',
+  ],
+  SECURITY: [
+    'technology/security/cybersecurity',
+    'technology/security/security',
+  ],
+};
+
+/**
  * Business logic for agent management.
  * Handles registration (8004 NFT), health checks, and CRUD operations.
  *
@@ -125,15 +149,27 @@ export class AgentsService implements OnModuleInit {
 
     /*
      * Build OASF metadata JSON.
-     * dto.skills (OASF skills) and dto.domains (OASF domains) map directly.
-     * dto.specialisationTags maps to the DB `specialisation_tags` column, not OASF skills.
+     *
+     * OASF domains: use explicit dto.domains if provided (must be valid OASF slugs).
+     * Otherwise derive sensible defaults from dto.categories via the mapping above.
+     * NEVER fall back to raw category strings — the SDK validates against the full taxonomy.
+     *
+     * OASF skills: use explicit dto.skills if provided.
+     * dto.specialisationTags are our internal DB tags, NOT OASF skill slugs — do not pass them here.
      */
+    const oasfDomains: string[] =
+      dto.domains && dto.domains.length > 0
+        ? dto.domains
+        : dto.categories.flatMap((c) => CATEGORY_TO_OASF_DOMAINS[c] ?? []);
+
+    const oasfSkills: string[] = dto.skills ?? [];
+
     const metadata = this.buildRegistrationFileJson({
       name: dto.name,
       description: dto.description as string,
       services,
-      skills: dto.skills ?? dto.specialisationTags ?? [],
-      domains: dto.domains ?? (dto.categories as string[]) ?? [],
+      skills: oasfSkills,
+      domains: oasfDomains,
     });
 
     /* Step 3: Upload metadata to IPFS and form the token URI */

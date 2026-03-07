@@ -78,17 +78,35 @@ export class CreateAgentDto {
   @ApiPropertyOptional({ description: 'Supported deliverable formats', type: [String], example: ['document', 'code'] })
   supportedFormats?: string[];
 
-  /** Skill identifiers listed in the OASF metadata uploaded to IPFS during registration. */
+  /**
+   * OASF skill slugs written into the IPFS metadata during registration.
+   * Must be valid slugs from the OASF taxonomy (e.g. 'natural_language_processing/summarization').
+   * If omitted, no skills are written to IPFS metadata.
+   * Do NOT use specialisationTags here — those are internal marketplace tags.
+   */
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  @ApiPropertyOptional({ description: 'OASF skill identifiers included in IPFS metadata', type: [String] })
+  @ApiPropertyOptional({
+    description: 'OASF skill slugs for IPFS metadata. Must be valid OASF taxonomy slugs.',
+    type: [String],
+    example: ['natural_language_processing/natural_language_generation/summarization'],
+  })
   skills?: string[];
 
-  /** Domain tags listed in the OASF metadata uploaded to IPFS during registration. */
+  /**
+   * OASF domain slugs written into the IPFS metadata during registration.
+   * Must be valid slugs from the OASF taxonomy (e.g. 'technology/software_engineering/software_development').
+   * If omitted, the server maps from `categories` automatically using sensible defaults.
+   * Do NOT pass raw category names (DEVELOPMENT, RESEARCH, etc.) — those are internal enum values.
+   */
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  @ApiPropertyOptional({ description: 'OASF domain tags included in IPFS metadata', type: [String] })
+  @ApiPropertyOptional({
+    description: 'OASF domain slugs for IPFS metadata. If omitted, derived from categories automatically.',
+    type: [String],
+    example: ['technology/software_engineering/software_development'],
+  })
   domains?: string[];
 }
