@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   address,
@@ -136,6 +136,28 @@ export class EscrowService implements OnModuleInit {
     const usdcMint = this.config.get<string>('solana.usdcMint')!;
     const jobType =
       params.jobType.toLowerCase() === 'bounty' ? JobType.Bounty : JobType.Gig;
+
+    /* Pre-flight: verify the client's USDC ATA exists and has sufficient balance.
+     * Catches the issue server-side so we return a helpful 400 instead of
+     * letting Phantom/MWA fail with a cryptic "simulation failed" error. */
+    const clientAta = await this.deriveAta(params.clientPubkey, usdcMint);
+    try {
+      const { value: bal } = await this.rpc
+        .getTokenAccountBalance(clientAta)
+        .send();
+      if (BigInt(bal.amount) < BigInt(params.prizeLamports)) {
+        throw new BadRequestException(
+          `Insufficient USDC: wallet has ${bal.uiAmountString} USDC, bounty requires ${params.prizeLamports / 1_000_000} USDC`,
+        );
+      }
+    } catch (e) {
+      if (e instanceof BadRequestException) throw e;
+      /* getTokenAccountBalance throws when the ATA doesn't exist */
+      throw new BadRequestException(
+        `No USDC account found for wallet ${params.clientPubkey}. ` +
+          `Please get devnet USDC at https://faucet.circle.com first.`,
+      );
+    }
 
     const ix = await getCreateEscrowInstructionAsync({
       client: clientNoop,
