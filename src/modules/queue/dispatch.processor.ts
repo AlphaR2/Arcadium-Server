@@ -11,22 +11,23 @@ import { AgentEntity } from '../../common/entities/agent.entity';
 
 /**
  * Bull queue processor for the 'dispatch' queue.
- * Consumes 'dispatch-bounty' jobs that are enqueued whenever an agent owner
- * registers their agent for a bounty.
+ * Consumes 'dispatch-bounty' jobs enqueued when an agent registers for a bounty.
  *
- * Job lifecycle:
- *   1. Fetch bounty details from Supabase
- *   2. Fetch agent webhook URL and secret from Supabase
- *   3. Build a signed dispatch payload
- *   4. POST to the agent's webhook URL with HMAC-SHA256 signature header
- *   5. Update the bounty_registration.dispatch_state to 'dispatched' on success
- *      or 'failed' after all retry attempts are exhausted
+ * Dispatch routing (in priority order):
+ *   1. Agent has telegram_chat_id  → send Telegram bot message (no public server needed)
+ *   2. Agent has webhook_url       → POST signed payload to webhook (original behaviour)
+ *   3. Agent has neither           → mark dispatch_state='queued' (agent polls GET /bounties/dispatched)
+ *
+ * Telegram API is called directly via axios to avoid a circular module dependency
+ * with TelegramModule. The bot token is read from ConfigService.
  */
 @Processor('dispatch')
 @Injectable()
 export class DispatchProcessor {
   private readonly logger = new Logger(DispatchProcessor.name);
   private readonly supabase: SupabaseClient;
+  private readonly telegramApiBase: string;
+  private readonly telegramEnabled: boolean;
 
   constructor(private readonly config: ConfigService) {
     /* Direct Supabase client — avoids circular imports from BountiesModule/AgentsModule */
@@ -34,20 +35,26 @@ export class DispatchProcessor {
       config.get<string>('supabase.url') ?? '',
       config.get<string>('supabase.serviceKey') ?? '',
     );
+
+    const token = config.get<string>('telegram.botToken') ?? '';
+    this.telegramEnabled = token.length > 0;
+    this.telegramApiBase = `https://api.telegram.org/bot${token}`;
   }
 
   /**
    * Processes a single dispatch-bounty job.
    * Throws on failure so Bull's retry/backoff mechanism can re-queue the job.
-   * After all attempts fail, Bull marks the job as failed and the caller can
-   * use POST /bounties/:id/retry-dispatch/:regId to re-enqueue manually.
+   * After all attempts fail, Bull marks it 'failed' — caller can retry via
+   * POST /bounties/:id/retry-dispatch/:regId.
    */
   @Process('dispatch-bounty')
   async handleDispatch(job: Job<DispatchJobPayload>): Promise<void> {
     const { registrationId, bountyId, agentId } = job.data;
-    this.logger.log(`Dispatching bounty ${bountyId} to agent ${agentId} (attempt ${job.attemptsMade + 1})`);
+    this.logger.log(
+      `Dispatching bounty ${bountyId} to agent ${agentId} (attempt ${job.attemptsMade + 1})`,
+    );
 
-    /* Step 1: Load the bounty record */
+    /* ── Step 1: Load the bounty record ── */
     const { data: bountyData, error: bountyErr } = await this.supabase
       .from('bounties')
       .select('*')
@@ -59,23 +66,100 @@ export class DispatchProcessor {
     }
     const bounty = bountyData as BountyEntity;
 
-    /* Step 2: Load the agent's webhook URL and shared secret */
+    /* ── Step 2: Load agent dispatch config (webhook + telegram) ── */
     const { data: agentData, error: agentErr } = await this.supabase
       .from('agents')
-      .select('webhook_url, webhook_secret')
+      .select('webhook_url, webhook_secret, telegram_chat_id')
       .eq('id', agentId)
       .single();
 
     if (agentErr || !agentData) {
       throw new Error(`Agent ${agentId} not found: ${agentErr?.message ?? 'unknown'}`);
     }
-    const agent = agentData as Pick<AgentEntity, 'webhook_url' | 'webhook_secret'>;
+    const agent = agentData as Pick<AgentEntity, 'webhook_url' | 'webhook_secret' | 'telegram_chat_id'>;
 
-    /* Step 3: Build the dispatch payload sent to the agent */
+    /* ── Route 1: Telegram (highest priority) ── */
+    if (agent.telegram_chat_id && this.telegramEnabled) {
+      await this.dispatchViaTelegram(agent.telegram_chat_id, registrationId, bounty);
+      return;
+    }
+
+    /* ── Route 2: Webhook ── */
+    if (agent.webhook_url) {
+      await this.dispatchViaWebhook(agent, registrationId, bountyId, bounty);
+      return;
+    }
+
+    /* ── Route 3: Polling fallback — no active channel configured ── */
+    this.logger.log(
+      `Agent ${agentId} has no webhook or Telegram — marking dispatch_state=queued for polling`,
+    );
+    await this.supabase
+      .from('bounty_registrations')
+      .update({ dispatch_state: 'queued' })
+      .eq('id', registrationId);
+  }
+
+  /**
+   * Sends a formatted bounty dispatch message via the Telegram Bot API.
+   * Marks the registration as 'dispatched' on success.
+   */
+  private async dispatchViaTelegram(
+    chatId: string,
+    registrationId: string,
+    bounty: BountyEntity,
+  ): Promise<void> {
+    const deadline = new Date(bounty.submission_deadline).toUTCString();
+
+    const message = [
+      '🎯 <b>New Bounty Dispatched</b>',
+      '',
+      `📋 <b>Title:</b> ${bounty.title}`,
+      `💰 <b>Prize:</b> $${bounty.prize_usdc} USDC`,
+      `📁 <b>Category:</b> ${bounty.category}`,
+      `📄 <b>Format:</b> ${bounty.deliverable_format}`,
+      `⏰ <b>Deadline:</b> ${deadline}`,
+      '',
+      '📝 <b>Description:</b>',
+      bounty.description,
+      '',
+      '─────────────────────',
+      '🔖 <b>Registration ID:</b>',
+      `<code>${registrationId}</code>`,
+      '',
+      'To submit your work, reply with:',
+      `<code>[${registrationId}] Your deliverable content here</code>`,
+    ].join('\n');
+
+    await axios.post(`${this.telegramApiBase}/sendMessage`, {
+      chat_id: chatId,
+      text: message,
+      parse_mode: 'HTML',
+    });
+
+    await this.supabase
+      .from('bounty_registrations')
+      .update({ dispatch_state: 'dispatched' })
+      .eq('id', registrationId);
+
+    this.logger.log(`Dispatched bounty ${bounty.id} via Telegram to chat ${chatId}`);
+  }
+
+  /**
+   * POSTs a HMAC-SHA256 signed payload to the agent's webhook URL.
+   * Marks the registration as 'dispatched' on success.
+   * Throws on HTTP error so Bull can retry.
+   */
+  private async dispatchViaWebhook(
+    agent: Pick<AgentEntity, 'webhook_url' | 'webhook_secret' | 'telegram_chat_id'>,
+    registrationId: string,
+    bountyId: string,
+    bounty: BountyEntity,
+  ): Promise<void> {
     const payload = {
       registration_id: registrationId,
       bounty_id: bountyId,
-      job_id: bounty.job_id_bytes,       // on-chain job ID (hex bytes)
+      job_id: bounty.job_id_bytes,
       title: bounty.title,
       description: bounty.description,
       category: bounty.category,
@@ -85,15 +169,13 @@ export class DispatchProcessor {
       review_deadline: bounty.review_deadline,
     };
 
-    /* Step 4: Sign the body with HMAC-SHA256 using the agent's webhook secret */
     const body = JSON.stringify(payload);
     const sig = crypto
-      .createHmac('sha256', agent.webhook_secret)
+      .createHmac('sha256', agent.webhook_secret ?? '')
       .update(body)
       .digest('hex');
 
-    /* POST to the agent's webhook — timeout after 10 seconds */
-    await axios.post(agent.webhook_url, payload, {
+    await axios.post(agent.webhook_url!, payload, {
       headers: {
         'arcadium-signature': sig,
         'content-type': 'application/json',
@@ -101,12 +183,11 @@ export class DispatchProcessor {
       timeout: 10_000,
     });
 
-    /* Step 5: Update dispatch_state to 'dispatched' on success */
     await this.supabase
       .from('bounty_registrations')
       .update({ dispatch_state: 'dispatched' })
       .eq('id', registrationId);
 
-    this.logger.log(`Dispatched bounty ${bountyId} to agent ${agentId} successfully`);
+    this.logger.log(`Dispatched bounty ${bountyId} via webhook to ${agent.webhook_url}`);
   }
 }

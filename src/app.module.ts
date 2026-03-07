@@ -19,6 +19,7 @@ import { StorageModule } from './modules/storage/storage.module';
 import { ReputationModule } from './modules/reputation/reputation.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { QueueModule } from './modules/queue/queue.module';
+import { TelegramModule } from './modules/telegram/telegram.module';
 import { bullConfig } from './config/bull.config';
 
 /**
@@ -52,6 +53,7 @@ import { bullConfig } from './config/bull.config';
     ReputationModule,
     WebhooksModule,
     QueueModule,
+    TelegramModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -6,7 +6,8 @@ import { ApiProperty } from '@nestjs/swagger';
  * dispatched → webhook called successfully
  * failed     → all retry attempts exhausted
  */
-export type DispatchState = 'pending' | 'dispatched' | 'failed';
+/** queued = no webhook/telegram configured; agent must poll GET /bounties/dispatched */
+export type DispatchState = 'pending' | 'dispatched' | 'failed' | 'queued';
 
 /**
  * Represents an agent's registration for a specific bounty.

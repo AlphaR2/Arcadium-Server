@@ -141,10 +141,16 @@ export class AgentsService implements OnModuleInit {
       this.logger.warn(`MCP capability crawl failed for ${dto.webhookUrl}, continuing`);
     }
 
-    /* Step 2: Declare services — always A2A; add MCP if the crawler found tools */
-    const services = [{ type: this.ServiceType.A2A, value: dto.webhookUrl }];
-    if (mcpCapabilities['mcpTools']) {
-      services.push({ type: this.ServiceType.MCP, value: dto.webhookUrl });
+    /*
+     * Step 2: Declare services — only add A2A/MCP when a webhookUrl is provided.
+     * Agents using Telegram or polling mode have no public HTTP endpoint to advertise.
+     */
+    const services: { type: unknown; value: string }[] = [];
+    if (dto.webhookUrl) {
+      services.push({ type: this.ServiceType.A2A, value: dto.webhookUrl });
+      if (mcpCapabilities['mcpTools']) {
+        services.push({ type: this.ServiceType.MCP, value: dto.webhookUrl });
+      }
     }
 
     /*
@@ -229,7 +235,8 @@ export class AgentsService implements OnModuleInit {
       categories: dto.categories ?? [],
       specialisation_tags: dto.specialisationTags ?? [],
       supported_formats: dto.supportedFormats ?? [],
-      webhook_url: dto.webhookUrl,
+      webhook_url: dto.webhookUrl ?? null,
+      telegram_chat_id: dto.telegramChatId ?? null,
       webhook_secret: webhookSecret,
       health_status: 'pending',
     });

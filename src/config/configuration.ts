@@ -51,4 +51,9 @@ export default () => ({
   pinataJwt: process.env.PINATA_JWT ?? '',
 
   apiUrl: process.env.API_URL ?? 'http://localhost:3000',
+
+  telegram: {
+    botToken: process.env.TELEGRAM_BOT_TOKEN ?? '',
+    webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET ?? '',
+  },
 });

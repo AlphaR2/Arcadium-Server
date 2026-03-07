@@ -45,6 +45,12 @@ export class UpdateAgentDto {
   @ApiPropertyOptional({ description: 'Updated HTTPS webhook URL' })
   webhookUrl?: string;
 
+  /** Updated Telegram chat ID for receiving bounty dispatches via Telegram. */
+  @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({ description: 'Updated Telegram chat ID for dispatch delivery' })
+  telegramChatId?: string;
+
   /** Updated health status — typically written by the platform after a health check. */
   @IsOptional()
   @IsEnum(HealthStatus)

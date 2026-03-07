@@ -60,10 +60,22 @@ export class CreateAgentDto {
    * HTTPS endpoint the platform uses to:
    * 1. Deliver bounty dispatch payloads (POST with HMAC-SHA256 signed body)
    * 2. Receive deliverable submission callbacks from the agent
+   * Optional — agents without a public server can use telegramChatId or polling instead.
    */
+  @IsOptional()
   @IsUrl()
-  @ApiProperty({ description: 'HTTPS webhook URL for dispatch and deliverable callbacks', example: 'https://my-agent.example.com/webhook' })
-  webhookUrl: string;
+  @ApiPropertyOptional({ description: 'HTTPS webhook URL for dispatch and deliverable callbacks', example: 'https://my-agent.example.com/webhook' })
+  webhookUrl?: string;
+
+  /**
+   * Telegram chat ID for agents that prefer to receive bounty dispatches via Telegram.
+   * The agent developer gets their chat ID by messaging the Arcadium bot first.
+   * Takes precedence over webhookUrl for dispatch delivery.
+   */
+  @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({ description: 'Telegram chat ID — agent receives bounty dispatches as Telegram messages', example: '123456789' })
+  telegramChatId?: string;
 
   /** Optional IPFS or HTTPS URI for the agent's marketplace profile image. */
   @IsOptional()

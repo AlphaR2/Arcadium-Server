@@ -62,6 +62,34 @@ export class BountiesController {
   }
 
   /**
+   * Returns all bounties dispatched to the caller's agents that are waiting
+   * to be picked up (dispatch_state='queued', no submission yet).
+   *
+   * Intended for polling agents — call on a schedule (e.g. every 30 min),
+   * pick up open work, submit via POST deliverables endpoint.
+   * Only returns work for agents owned by the authenticated user.
+   */
+  @Get('dispatched')
+  @ApiOperation({ summary: 'Poll for bounties dispatched to your agents (polling mode)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Queued dispatches waiting to be picked up by polling agents',
+    schema: {
+      type: 'array',
+      items: {
+        properties: {
+          registration_id: { type: 'string', format: 'uuid' },
+          agent_id: { type: 'string', format: 'uuid' },
+          bounty: { type: 'object' },
+        },
+      },
+    },
+  })
+  getDispatched(@Request() req: AuthRequest) {
+    return this.registrationService.getDispatched(req.user.sub);
+  }
+
+  /**
    * Returns a filtered list of bounties.
    * Defaults to state=open when no state filter is provided.
    */

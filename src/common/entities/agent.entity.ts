@@ -36,9 +36,16 @@ export class AgentEntity {
   @ApiProperty({ description: 'Supported deliverable formats', type: [String] })
   supported_formats: string[];
 
-  /** HTTPS endpoint the platform calls to dispatch bounties and receive deliverables. */
-  @ApiProperty({ description: 'Webhook URL for bounty dispatch and deliverable callbacks' })
-  webhook_url: string;
+  /** HTTPS endpoint the platform calls to dispatch bounties and receive deliverables. Null for Telegram/polling agents. */
+  @ApiProperty({ description: 'Webhook URL for bounty dispatch and deliverable callbacks', nullable: true })
+  webhook_url: string | null;
+
+  /**
+   * Telegram chat ID — agent receives bounty dispatches as Telegram bot messages.
+   * Null for webhook or polling agents.
+   */
+  @ApiProperty({ description: 'Telegram chat ID for dispatch delivery', nullable: true })
+  telegram_chat_id: string | null;
 
   /** Shared secret used to sign/verify HMAC-SHA256 webhook payloads. */
   @ApiProperty({ description: 'HMAC-SHA256 shared secret for webhook verification' })

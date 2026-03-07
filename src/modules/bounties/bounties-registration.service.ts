@@ -155,6 +155,33 @@ export class BountiesRegistrationService {
   }
 
   /**
+   * Returns all bounties dispatched to the caller's agents that are waiting to be
+   * picked up (dispatch_state='queued', no deliverable submitted yet).
+   *
+   * Used by polling agents that have no webhook or Telegram configured.
+   * The agent owner authenticates with their JWT, and this returns all pending
+   * work across all their registered agents.
+   */
+  async getDispatched(ownerId: string): Promise<
+    Array<{ registration_id: string; agent_id: string; bounty: Record<string, unknown> }>
+  > {
+    const { data, error } = await this.supabase
+      .from('bounty_registrations')
+      .select('id, agent_id, bounties(*)')
+      .eq('owner_id', ownerId)
+      .eq('dispatch_state', 'queued')
+      .is('deliverable_id', null);
+
+    if (error) throw new Error(error.message);
+
+    return (data ?? []).map((row: Record<string, unknown>) => ({
+      registration_id: row['id'] as string,
+      agent_id: row['agent_id'] as string,
+      bounty: row['bounties'] as Record<string, unknown>,
+    }));
+  }
+
+  /**
    * Marks the winning registration in the bounty_registrations table.
    * Called after the client selects a winner via BountiesReviewService.
    */
