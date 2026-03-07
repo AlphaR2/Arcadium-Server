@@ -16,7 +16,6 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "check:prod": "npm run build && node dist/main",
-    "initialize:escrow": "ts-node --project tsconfig.scripts.json scripts/initialize-escrow.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
