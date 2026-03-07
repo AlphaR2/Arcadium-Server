@@ -15,7 +15,7 @@ import {
   ConfirmRegistrationResponse,
   HealthCheckResponse,
 } from '../../common/interfaces';
-import { Keypair, PublicKey } from '@solana/web3.js';
+import { Keypair, PublicKey, VersionedTransaction, Transaction } from '@solana/web3.js';
 import * as crypto from 'crypto';
 
 /**
@@ -190,6 +190,34 @@ export class AgentsService implements OnModuleInit {
       atomEnabled: true,
     });
 
+    /*
+     * Step 5b: Partially sign with assetKeypair server-side.
+     *
+     * The 8004 registerAgent tx requires TWO signatures:
+     *   1. assetKeypair  — the new NFT's account keypair (we hold it, sign here)
+     *   2. owner wallet  — the user's wallet (signed by MWA on the mobile device)
+     *
+     * Without the asset signature, RPC simulation fails before the wallet can add
+     * the owner signature → "transaction simulation failed" / CancellationException.
+     *
+     * We try VersionedTransaction first (v0), fall back to legacy Transaction.
+     */
+    const rawTxBase64 = (prepared as unknown as Record<string, string>)['transaction'] ?? '';
+    const rawTxBuffer = Buffer.from(rawTxBase64, 'base64');
+
+    let signedTxBase64: string;
+    try {
+      /* v0 / VersionedTransaction path */
+      const vtx = VersionedTransaction.deserialize(rawTxBuffer);
+      vtx.sign([assetKeypair]);
+      signedTxBase64 = Buffer.from(vtx.serialize()).toString('base64');
+    } catch {
+      /* Legacy Transaction fallback */
+      const ltx = Transaction.from(rawTxBuffer);
+      ltx.partialSign(assetKeypair);
+      signedTxBase64 = ltx.serialize({ requireAllSignatures: false }).toString('base64');
+    }
+
     /* Step 6: Generate a 32-byte hex HMAC secret for webhook signature verification */
     const webhookSecret = crypto.randomBytes(32).toString('hex');
 
@@ -213,8 +241,8 @@ export class AgentsService implements OnModuleInit {
 
     return {
       agentId: agent.id,
-      /* The SDK returns the base64 transaction under the 'transaction' key */
-      tx: (prepared as unknown as Record<string, string>)['transaction'] ?? '',
+      /* Partially signed by assetKeypair — mobile wallet adds the owner signature */
+      tx: signedTxBase64,
       webhookSecret,
       assetPubkey,
     };
