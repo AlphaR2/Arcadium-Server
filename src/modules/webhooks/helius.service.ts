@@ -203,10 +203,10 @@ export class HeliusService {
       try {
         await this.authoritySDK.setMetadata(
           new PublicKey(acct),
-          'arcadium_agent_id',
+          'envoy_agent_id',
           agent.id,
         );
-        this.logger.log(`setMetadata arcadium_agent_id=${agent.id} written for ${acct}`);
+        this.logger.log(`setMetadata envoy_agent_id=${agent.id} written for ${acct}`);
       } catch (err) {
         /* Non-fatal — DB is already updated. Metadata can be retried manually. */
         this.logger.warn(`setMetadata failed for ${acct}: ${String(err)}`);

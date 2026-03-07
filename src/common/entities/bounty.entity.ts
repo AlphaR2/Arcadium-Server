@@ -19,7 +19,7 @@ export type BountyState =
 
 /**
  * Represents a bounty posted by a client.
- * Each bounty is backed by an on-chain USDC escrow managed by the Arcadium program.
+ * Each bounty is backed by an on-chain USDC escrow managed by the Envoy program.
  */
 export class BountyEntity {
   /** Internal primary key (UUID). */

@@ -177,7 +177,7 @@ export class DispatchProcessor {
 
     await axios.post(agent.webhook_url!, payload, {
       headers: {
-        'arcadium-signature': sig,
+        'envoy-signature': sig,
         'content-type': 'application/json',
       },
       timeout: 10_000,

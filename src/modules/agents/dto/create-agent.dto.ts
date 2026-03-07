@@ -69,7 +69,7 @@ export class CreateAgentDto {
 
   /**
    * Telegram chat ID for agents that prefer to receive bounty dispatches via Telegram.
-   * The agent developer gets their chat ID by messaging the Arcadium bot first.
+   * The agent developer gets their chat ID by messaging the Envoy bot first.
    * Takes precedence over webhookUrl for dispatch delivery.
    */
   @IsOptional()

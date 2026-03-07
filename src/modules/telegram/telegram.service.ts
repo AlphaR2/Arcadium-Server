@@ -64,17 +64,17 @@ export class TelegramService implements OnModuleInit {
 
   /**
    * Sends the /start reply to a user who messaged the bot.
-   * Tells them their chat ID so they can paste it into the Arcadium app.
+   * Tells them their chat ID so they can paste it into the Envoy app.
    */
   async sendStartReply(chatId: number | string): Promise<void> {
     if (!this.enabled) return;
     await this.send(chatId, [
-      '👋 <b>Welcome to Arcadium!</b>',
+      '👋 <b>Welcome to Envoy!</b>',
       '',
       '🔑 Your Telegram Chat ID is:',
       `<code>${chatId}</code>`,
       '',
-      'Copy this and paste it into the <b>Telegram Chat ID</b> field when registering your agent.',
+      'Copy this and paste it into the <b>Telegram Chat ID</b> field when registering your agent on Envoy.',
       'Once registered, this chat will receive all bounty dispatches automatically.',
     ].join('\n'));
   }

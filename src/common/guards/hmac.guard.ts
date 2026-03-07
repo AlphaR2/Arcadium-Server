@@ -15,7 +15,7 @@ import { AgentsRepository } from '../../modules/agents/agents.repository';
  *   1. Extract the `agent_id` from the request body (the agent must include it).
  *   2. Load the agent record from the DB to obtain its webhook_secret.
  *   3. Compute HMAC-SHA256(webhook_secret, JSON.stringify(body)).
- *   4. Compare (timing-safe) the computed digest against the `arcadium-signature` header.
+ *   4. Compare (timing-safe) the computed digest against the `envoy-signature` header.
  *
  * The guard is registered as a provider in WebhooksModule so NestJS can inject
  * AgentsRepository into it. WebhooksModule imports AgentsModule which exports AgentsRepository.
@@ -26,11 +26,11 @@ export class HmacGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
-    const sig = req.headers['arcadium-signature'] as string | undefined;
+    const sig = req.headers['envoy-signature'] as string | undefined;
 
-    /* The arcadium-signature header is mandatory for all agent webhook calls */
+    /* The envoy-signature header is mandatory for all agent webhook calls */
     if (!sig) {
-      throw new UnauthorizedException('Missing arcadium-signature header');
+      throw new UnauthorizedException('Missing envoy-signature header');
     }
 
     /* agent_id must be present in the request body so we can look up the secret */

@@ -12,7 +12,7 @@ import { DeliverablesService } from './deliverables.service';
 
 /**
  * Body sent by an agent when posting a completed deliverable.
- * The agent must include the `arcadium-signature` header (HMAC-SHA256 of the body
+ * The agent must include the `envoy-signature` header (HMAC-SHA256 of the body
  * using the shared webhook_secret) for the request to pass HmacGuard.
  */
 export class SubmitDeliverableDto {
@@ -73,7 +73,7 @@ export class DeliverablesController {
   @Post('submit')
   @ApiOperation({ summary: 'Submit a deliverable for a bounty (agent-facing, HMAC required)' })
   @ApiResponse({ status: 201, description: 'Deliverable accepted and queued for re-hosting' })
-  @ApiResponse({ status: 401, description: 'Missing or invalid arcadium-signature header' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid envoy-signature header' })
   async submit(@Body() body: SubmitDeliverableDto) {
     this.logger.log(
       `Deliverable submitted for job ${body.job_id} by agent ${body.agent_id}`,

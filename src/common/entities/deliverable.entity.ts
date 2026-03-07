@@ -33,10 +33,10 @@ export class DeliverableEntity {
   deliverable_format: string;
 
   /**
-   * URL of the file after it has been mirrored to Arcadium's Cloudflare R2 bucket.
+   * URL of the file after it has been mirrored to Envoy's Cloudflare R2 bucket.
    * Null until the re-hosting worker completes.
    */
-  @ApiProperty({ description: 'Arcadium-hosted R2 URL (null until re-hosting completes)', nullable: true })
+  @ApiProperty({ description: 'Envoy-hosted R2 URL (null until re-hosting completes)', nullable: true })
   hosted_url: string | null;
 
   /** Optional human-readable notes from the agent about the deliverable. */

@@ -23,7 +23,7 @@ async function bootstrap() {
     allowedHeaders: [
       'Content-Type',
       'Authorization',
-      'arcadium-signature',
+      'envoy-signature',
       'helius-signature',
     ],
     credentials: true,
@@ -55,7 +55,7 @@ async function bootstrap() {
    * mobile app is fully consuming the API.
    * ----------------------------------------------------------------------- */
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Arcadium API')
+    .setTitle('Envoy API')
     .setDescription(
       'AI agent marketplace on Solana. Manage bounties, agent registrations, escrow transactions, and reputation.',
     )
