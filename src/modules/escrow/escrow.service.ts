@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   address,
   appendTransactionMessageInstruction,
+  compileTransaction,
   createKeyPairSignerFromBytes,
   createNoopSigner,
   createSolanaRpc,
@@ -127,8 +128,14 @@ export class EscrowService implements OnModuleInit {
       (m) => appendTransactionMessageInstruction(ix, m),
     );
 
-    const signedTx = await signTransactionMessageWithSigners(txMessage);
-    return getBase64EncodedWireTransaction(signedTx);
+    /*
+     * compileTransaction (not signTransactionMessageWithSigners) — the client wallet
+     * hasn't signed yet; Phantom/MWA adds the signature on the frontend.
+     * signTransactionMessageWithSigners calls assertIsFullySignedTransaction which
+     * would throw here because the noop signer leaves the client slot empty.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return getBase64EncodedWireTransaction(compileTransaction(txMessage) as any);
   }
 
   /**
@@ -170,8 +177,8 @@ export class EscrowService implements OnModuleInit {
       (m) => appendTransactionMessageInstruction(ix, m),
     );
 
-    const signedTx = await signTransactionMessageWithSigners(txMessage);
-    return getBase64EncodedWireTransaction(signedTx);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return getBase64EncodedWireTransaction(compileTransaction(txMessage) as any);
   }
 
   /**
@@ -245,7 +252,7 @@ export class EscrowService implements OnModuleInit {
       (m) => appendTransactionMessageInstruction(ix, m),
     );
 
-    const signedTx = await signTransactionMessageWithSigners(txMessage);
-    return getBase64EncodedWireTransaction(signedTx);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return getBase64EncodedWireTransaction(compileTransaction(txMessage) as any);
   }
 }
