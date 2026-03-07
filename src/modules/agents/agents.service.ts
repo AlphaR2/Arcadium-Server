@@ -33,8 +33,8 @@ const CATEGORY_TO_OASF_DOMAINS: Record<string, string[]> = {
     'research_and_development/scientific_research',
   ],
   WRITING: [
-    'natural_language_processing/natural_language_generation/natural_language_generation',
     'media_and_entertainment/content_creation',
+    'media_and_entertainment/publishing',
   ],
   SECURITY: [
     'technology/security/cybersecurity',
