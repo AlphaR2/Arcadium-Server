@@ -98,4 +98,8 @@ export class BountyEntity {
   /** Number of agents that have submitted a deliverable for this bounty. */
   @ApiProperty({ description: 'Number of submitted deliverables' })
   submission_count: number;
+
+  /** Total number of agents registered for this bounty (submitted or not). */
+  @ApiProperty({ description: 'Total number of registered agents' })
+  registration_count: number;
 }

@@ -39,8 +39,15 @@ export class BountiesRepository {
       .eq('id', id)
       .single();
     if (error) throw new Error(error.message);
-    const counts = await this.fetchSubmissionCounts([id]);
-    return { ...(data as BountyEntity), submission_count: counts[id] ?? 0 };
+    const [submissionCounts, registrationCounts] = await Promise.all([
+      this.fetchSubmissionCounts([id]),
+      this.fetchRegistrationCounts([id]),
+    ]);
+    return {
+      ...(data as BountyEntity),
+      submission_count: submissionCounts[id] ?? 0,
+      registration_count: registrationCounts[id] ?? 0,
+    };
   }
 
   /**
@@ -78,8 +85,15 @@ export class BountiesRepository {
     const bounties = (data ?? []) as BountyEntity[];
     if (bounties.length === 0) return bounties;
     const ids = bounties.map((b) => b.id);
-    const counts = await this.fetchSubmissionCounts(ids);
-    return bounties.map((b) => ({ ...b, submission_count: counts[b.id] ?? 0 }));
+    const [submissionCounts, registrationCounts] = await Promise.all([
+      this.fetchSubmissionCounts(ids),
+      this.fetchRegistrationCounts(ids),
+    ]);
+    return bounties.map((b) => ({
+      ...b,
+      submission_count: submissionCounts[b.id] ?? 0,
+      registration_count: registrationCounts[b.id] ?? 0,
+    }));
   }
 
   /** Updates specified columns for a bounty and returns the updated row. */
@@ -135,6 +149,27 @@ export class BountiesRepository {
       .select('bounty_id')
       .in('bounty_id', bountyIds)
       .not('deliverable_id', 'is', null);
+    if (error) throw new Error(error.message);
+    const counts: Record<string, number> = {};
+    for (const row of data ?? []) {
+      const id = (row as { bounty_id: string }).bounty_id;
+      counts[id] = (counts[id] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /**
+   * Fetches total registration counts for a list of bounty IDs in a single query.
+   * Counts all registrations regardless of submission status.
+   * Returns a map of bounty_id → count.
+   */
+  private async fetchRegistrationCounts(
+    bountyIds: string[],
+  ): Promise<Record<string, number>> {
+    const { data, error } = await this.supabase
+      .from('bounty_registrations')
+      .select('bounty_id')
+      .in('bounty_id', bountyIds);
     if (error) throw new Error(error.message);
     const counts: Record<string, number> = {};
     for (const row of data ?? []) {

@@ -78,11 +78,12 @@ export class DeliverablesService {
     const { data: deliverable, error: delError } = await this.supabase
       .from('deliverables')
       .insert({
-        job_id: body.job_id,
+        bounty_id: r['bounty_id'],
+        registration_id: body.registration_id,
         agent_id: body.agent_id,
-        format: body.deliverable_format,
-        file_url: key,
-        submitted_at: new Date().toISOString(),
+        deliverable_url: body.deliverable_url,
+        deliverable_format: body.deliverable_format,
+        hosted_url: r2Url,
       })
       .select('id')
       .single();
