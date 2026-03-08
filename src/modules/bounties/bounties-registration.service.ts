@@ -77,6 +77,27 @@ export class BountiesRegistrationService {
     return registration;
   }
 
+  /**
+   * Returns the caller's registration for a specific bounty, across any of their agents.
+   * Returns null if the user has no agent registered for this bounty.
+   * Used by the frontend to reliably show the correct button state regardless of
+   * dispatch_state or whether a deliverable has been submitted.
+   */
+  async getMyRegistration(
+    bountyId: string,
+    ownerId: string,
+  ): Promise<BountyRegistrationEntity | null> {
+    const { data, error } = await this.supabase
+      .from('bounty_registrations')
+      .select('*')
+      .eq('bounty_id', bountyId)
+      .eq('owner_id', ownerId)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    return (data as BountyRegistrationEntity) ?? null;
+  }
+
   /** Removes an agent's registration for a bounty (before the submission deadline). */
   async deregisterAgent(bountyId: string, agentId: string): Promise<void> {
     await this.supabase

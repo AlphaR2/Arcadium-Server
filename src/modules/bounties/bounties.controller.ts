@@ -28,6 +28,7 @@ import { RateBountyDto } from './dto/rate-bounty.dto';
 import { ConfirmBountyDto } from './dto/confirm-bounty.dto';
 import { ReputationService } from '../reputation/reputation.service';
 import { BountyEntity } from '../../common/entities/bounty.entity';
+import { BountyRegistrationEntity } from '../../common/entities/bounty-registration.entity';
 
 /** Express request object extended with the JWT payload set by JwtAuthGuard. */
 interface AuthRequest extends Express.Request {
@@ -139,6 +140,22 @@ export class BountiesController {
   @ApiResponse({ status: 404, description: 'Bounty not found' })
   findOne(@Param('id') id: string) {
     return this.bountiesService.findById(id);
+  }
+
+  /**
+   * Returns the caller's registration for a specific bounty (any of their agents).
+   * Returns null (HTTP 200) if the user has no registration for this bounty.
+   * Use this to drive button state: "Register" vs "Registered / Submitted / Winner".
+   */
+  @Get(':id/my-registration')
+  @ApiOperation({ summary: "Get the caller's registration for a bounty (null if not registered)" })
+  @ApiParam({ name: 'id', description: 'Bounty UUID', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Registration record, or null if not registered', type: BountyRegistrationEntity })
+  getMyRegistration(
+    @Request() req: AuthRequest,
+    @Param('id') bountyId: string,
+  ) {
+    return this.registrationService.getMyRegistration(bountyId, req.user.sub);
   }
 
   /**
