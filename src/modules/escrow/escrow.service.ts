@@ -130,16 +130,17 @@ export class EscrowService implements OnModuleInit {
    * Returns base64-encoded wire transaction for Phantom to sign + broadcast.
    */
   async buildCreateEscrowTx(params: CreateEscrowParams): Promise<string> {
-    this.logger.log(`buildCreateEscrowTx for client ${params.clientPubkey}`);
+    this.logger.log(`buildCreateEscrowTx client=${params.clientPubkey} prize=${params.prizeLamports / 1_000_000} USDC`);
 
     const clientNoop = createNoopSigner(address(params.clientPubkey));
     const usdcMint = this.config.get<string>('solana.usdcMint')!;
+    const rpcUrl = this.config.get<string>('solana.rpcUrl')!;
     const jobType =
       params.jobType.toLowerCase() === 'bounty' ? JobType.Bounty : JobType.Gig;
 
     /* Pre-flight: verify the client's USDC ATA exists and has sufficient balance.
-     * Catches the issue server-side so we return a helpful 400 instead of
-     * letting Phantom/MWA fail with a cryptic "simulation failed" error. */
+     * Returns 400 with a clear message instead of letting the wallet show a
+     * cryptic "simulation failed" / MWA CancellationException. */
     const clientAta = await this.deriveAta(params.clientPubkey, usdcMint);
     try {
       const { value: bal } = await this.rpc
@@ -152,7 +153,6 @@ export class EscrowService implements OnModuleInit {
       }
     } catch (e) {
       if (e instanceof BadRequestException) throw e;
-      /* getTokenAccountBalance throws when the ATA doesn't exist */
       throw new BadRequestException(
         `No USDC account found for wallet ${params.clientPubkey}. ` +
           `Please get devnet USDC at https://faucet.circle.com first.`,
@@ -169,7 +169,6 @@ export class EscrowService implements OnModuleInit {
     });
 
     const latestBlockhash = await this.getCachedBlockhash();
-
     const txMessage = pipe(
       createTransactionMessage({ version: 0 }),
       (m) => setTransactionMessageFeePayerSigner(clientNoop, m),
@@ -177,16 +176,30 @@ export class EscrowService implements OnModuleInit {
       (m) => appendTransactionMessageInstruction(ix, m),
     );
 
-    /*
-     * compileTransaction (not signTransactionMessageWithSigners) — the client wallet
-     * hasn't signed yet; Phantom/MWA adds the signature on the frontend.
-     * signTransactionMessageWithSigners calls assertIsFullySignedTransaction which
-     * would throw here because the noop signer leaves the client slot empty.
-     */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return getBase64EncodedWireTransaction(
-      compileTransaction(txMessage) as any,
-    );
+    const b64 = getBase64EncodedWireTransaction(compileTransaction(txMessage) as any);
+
+    /* Server-side simulation to catch on-chain errors before the wallet sees the tx.
+     * TODO: switch to this.rpc.simulateTransaction() once @solana/kit resolves the
+     *       BigInt serialization issue on the unitsConsumed response field. */
+    try {
+      const { Connection, VersionedTransaction } = await import('@solana/web3.js');
+      const { value: sim } = await new Connection(rpcUrl, 'confirmed').simulateTransaction(
+        VersionedTransaction.deserialize(Buffer.from(b64, 'base64')),
+        { sigVerify: false, replaceRecentBlockhash: true },
+      );
+      if (sim.err) {
+        this.logger.error(`createEscrow simulation failed: ${JSON.stringify(sim.err)} | logs: ${(sim.logs ?? []).join(' | ')}`);
+        throw new BadRequestException(
+          `Transaction simulation failed: ${JSON.stringify(sim.err)} — Logs: ${(sim.logs ?? []).join(' | ')}`,
+        );
+      }
+    } catch (e) {
+      if (e instanceof BadRequestException) throw e;
+      this.logger.warn(`Simulation RPC call failed (non-fatal): ${String(e)}`);
+    }
+
+    return b64;
   }
 
   /**

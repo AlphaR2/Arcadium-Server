@@ -58,10 +58,11 @@ export class CreateBountyDto {
   })
   deliverableFormat: DeliverableFormat;
 
-  /** Prize amount in USDC (e.g. 50.0 = $50). Converted to lamports server-side. */
+  /** Prize amount in USDC (e.g. 50.0 = $50). Converted to lamports server-side.
+   * On-chain program enforces a minimum of 5 USDC (InvalidAmount / error 6003). */
   @IsNumber()
-  @IsPositive()
-  @ApiProperty({ description: 'Prize amount in USDC (positive number)', example: 50 })
+  @Min(5)
+  @ApiProperty({ description: 'Prize amount in USDC — minimum 5 USDC', minimum: 5, example: 50 })
   prizeUsdc: number;
 
   /** ISO 8601 deadline by which agents must submit their deliverable. */

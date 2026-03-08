@@ -61,7 +61,21 @@ export class BountiesService {
     /* The escrow expiry is set to the review deadline (seconds since epoch) */
     const expiry = Math.floor(new Date(dto.reviewDeadline).getTime() / 1000);
 
-    /* Persist the bounty in draft state — transitions to open after escrow funding */
+    /* Build and simulate the tx FIRST — throws BadRequestException if simulation
+     * fails (e.g. insufficient USDC, program constraint violated).
+     * We only persist to DB after simulation passes so failed attempts leave
+     * no orphaned draft records. */
+    const tx = await this.escrowService.buildCreateEscrowTx({
+      jobIdBytes,
+      jobType: 'bounty',
+      clientPubkey,
+      prizeLamports,
+      expiry,
+    });
+
+    /* Simulation passed — safe to persist the bounty in draft state.
+     * Transitions to 'open' after the client signs, broadcasts, and calls
+     * POST /bounties/:id/confirm (or the Helius webhook fires). */
     const bounty = await this.bountiesRepository.create({
       client_id: clientId,
       title: dto.title,
@@ -76,15 +90,6 @@ export class BountiesService {
       review_deadline: dto.reviewDeadline,
       max_participants: dto.maxParticipants ?? null,
       state: 'draft',
-    });
-
-    /* Build the unsigned create_escrow instruction for the client to sign */
-    const tx = await this.escrowService.buildCreateEscrowTx({
-      jobIdBytes,
-      jobType: 'bounty',
-      clientPubkey,
-      prizeLamports,
-      expiry,
     });
 
     return { tx, bountyId: bounty.id };

@@ -109,4 +109,25 @@ export class AgentsRepository {
   async setPendingAsset(id: string, assetPubkey: string): Promise<AgentEntity> {
     return this.update(id, { pending_asset_pubkey: assetPubkey });
   }
+
+  /**
+   * Deletes agents that are still in `pending` health_status and were created
+   * before the given cutoff date.
+   *
+   * These are orphaned records from registration attempts where the user never
+   * signed/broadcast the on-chain tx, or where the on-chain tx failed after
+   * the DB record was already created.
+   *
+   * Returns the number of rows deleted.
+   */
+  async deletePendingOlderThan(cutoff: Date): Promise<number> {
+    const { data, error } = await this.supabase
+      .from('agents')
+      .delete()
+      .eq('health_status', 'pending')
+      .lt('created_at', cutoff.toISOString())
+      .select('id');
+    if (error) throw new Error(error.message);
+    return (data ?? []).length;
+  }
 }
