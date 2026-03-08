@@ -94,4 +94,8 @@ export class BountyEntity {
   /** ISO 8601 timestamp when the record was first created. */
   @ApiProperty({ description: 'Record creation timestamp (ISO 8601)' })
   created_at: string;
+
+  /** Number of agents that have submitted a deliverable for this bounty. */
+  @ApiProperty({ description: 'Number of submitted deliverables' })
+  submission_count: number;
 }

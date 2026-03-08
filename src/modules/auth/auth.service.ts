@@ -157,15 +157,15 @@ export class AuthService {
     const keys = await this.redis.keys(`refresh:*:${hash}`);
     if (!keys || keys.length === 0) return null;
 
-    const raw = await this.redis.get<string>(keys[0]);
-    if (!raw) return null;
-
-    return JSON.parse(raw) as {
+    const entry = await this.redis.get<{
       userId: string;
       pubkey: string;
       roles: string[];
       preferred_categories: string[];
-    };
+    }>(keys[0]);
+    if (!entry) return null;
+
+    return entry;
   }
 
   private async revokeRefreshToken(token: string): Promise<void> {

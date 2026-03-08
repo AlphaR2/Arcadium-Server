@@ -42,7 +42,7 @@ export const bullConfig = {
         ),
 
         // Enable TLS when needed (Upstash, Railway, Render, AWS ElastiCache, etc.)
-        ...(useTls && { tls: {} }), // empty {} usually enough; add { rejectUnauthorized: false } only for dev/self-signed
+        ...(useTls && { tls: {} }),
       },
 
       // Sensible global defaults for jobs (very common in production)

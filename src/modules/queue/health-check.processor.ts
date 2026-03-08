@@ -1,7 +1,6 @@
-import { Processor, Process } from '@nestjs/bull';
-/* @nestjs/bull v11 uses bullmq internally — import Job from 'bullmq', not 'bull' */
+import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { Injectable, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { AgentsService } from '../agents/agents.service';
 import { HealthCheckJobPayload } from '../../common/interfaces';
 
@@ -15,18 +14,18 @@ import { HealthCheckJobPayload } from '../../common/interfaces';
  *   3. Updates agent.health_status in Supabase to healthy | degraded | unhealthy
  */
 @Processor('health-check')
-@Injectable()
-export class HealthCheckProcessor {
+export class HealthCheckProcessor extends WorkerHost {
   private readonly logger = new Logger(HealthCheckProcessor.name);
 
-  constructor(private readonly agentsService: AgentsService) {}
+  constructor(private readonly agentsService: AgentsService) {
+    super();
+  }
 
   /**
    * Runs a health check for the specified agent.
-   * Throws on error so Bull's retry mechanism can re-queue.
+   * Throws on error so BullMQ's retry mechanism can re-queue.
    */
-  @Process('run-health-check')
-  async handleHealthCheck(job: Job<HealthCheckJobPayload>): Promise<void> {
+  async process(job: Job<HealthCheckJobPayload>): Promise<void> {
     const { agentId } = job.data;
     this.logger.log(`Running health check for agent ${agentId} (attempt ${job.attemptsMade + 1})`);
 
@@ -36,7 +35,7 @@ export class HealthCheckProcessor {
       this.logger.log(`Health check result for agent ${agentId}: ${result.status}`);
     } catch (err) {
       this.logger.error(`Health check failed for agent ${agentId}`, err);
-      /* Re-throw so Bull marks the job as failed and can retry */
+      /* Re-throw so BullMQ marks the job as failed and can retry */
       throw err;
     }
   }

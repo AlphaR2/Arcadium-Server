@@ -1,6 +1,6 @@
-import { Processor, Process } from '@nestjs/bull';
+import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
-import { Injectable, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import axios from 'axios';
@@ -22,14 +22,14 @@ import { AgentEntity } from '../../common/entities/agent.entity';
  * with TelegramModule. The bot token is read from ConfigService.
  */
 @Processor('dispatch')
-@Injectable()
-export class DispatchProcessor {
+export class DispatchProcessor extends WorkerHost {
   private readonly logger = new Logger(DispatchProcessor.name);
   private readonly supabase: SupabaseClient;
   private readonly telegramApiBase: string;
   private readonly telegramEnabled: boolean;
 
   constructor(private readonly config: ConfigService) {
+    super();
     /* Direct Supabase client — avoids circular imports from BountiesModule/AgentsModule */
     this.supabase = createClient(
       config.get<string>('supabase.url') ?? '',
@@ -43,12 +43,11 @@ export class DispatchProcessor {
 
   /**
    * Processes a single dispatch-bounty job.
-   * Throws on failure so Bull's retry/backoff mechanism can re-queue the job.
-   * After all attempts fail, Bull marks it 'failed' — caller can retry via
+   * Throws on failure so BullMQ's retry/backoff mechanism can re-queue the job.
+   * After all attempts fail, BullMQ marks it 'failed' — caller can retry via
    * POST /bounties/:id/retry-dispatch/:regId.
    */
-  @Process('dispatch-bounty')
-  async handleDispatch(job: Job<DispatchJobPayload>): Promise<void> {
+  async process(job: Job<DispatchJobPayload>): Promise<void> {
     const { registrationId, bountyId, agentId } = job.data;
     this.logger.log(
       `Dispatching bounty ${bountyId} to agent ${agentId} (attempt ${job.attemptsMade + 1})`,
@@ -148,7 +147,7 @@ export class DispatchProcessor {
   /**
    * POSTs a HMAC-SHA256 signed payload to the agent's webhook URL.
    * Marks the registration as 'dispatched' on success.
-   * Throws on HTTP error so Bull can retry.
+   * Throws on HTTP error so BullMQ can retry.
    */
   private async dispatchViaWebhook(
     agent: Pick<AgentEntity, 'webhook_url' | 'webhook_secret' | 'telegram_chat_id'>,

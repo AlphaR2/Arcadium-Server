@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { BullModule } from '@nestjs/bull';
+import { BullModule } from '@nestjs/bullmq';
 import { DispatchProcessor } from './dispatch.processor';
 import { HealthCheckProcessor } from './health-check.processor';
 import { AgentsModule } from '../agents/agents.module';

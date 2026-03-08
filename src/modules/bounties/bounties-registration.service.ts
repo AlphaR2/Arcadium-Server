@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectQueue } from '@nestjs/bull';
+import { InjectQueue } from '@nestjs/bullmq';
 /* @nestjs/bull v11 uses bullmq internally — import Queue from 'bullmq', not 'bull' */
 import { Queue } from 'bullmq';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';

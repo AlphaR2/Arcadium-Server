@@ -39,7 +39,8 @@ export class BountiesRepository {
       .eq('id', id)
       .single();
     if (error) throw new Error(error.message);
-    return data as BountyEntity;
+    const counts = await this.fetchSubmissionCounts([id]);
+    return { ...(data as BountyEntity), submission_count: counts[id] ?? 0 };
   }
 
   /**
@@ -74,7 +75,11 @@ export class BountiesRepository {
     else query = query.eq('state', 'open');
     const { data, error } = await query;
     if (error) throw new Error(error.message);
-    return (data ?? []) as BountyEntity[];
+    const bounties = (data ?? []) as BountyEntity[];
+    if (bounties.length === 0) return bounties;
+    const ids = bounties.map((b) => b.id);
+    const counts = await this.fetchSubmissionCounts(ids);
+    return bounties.map((b) => ({ ...b, submission_count: counts[b.id] ?? 0 }));
   }
 
   /** Updates specified columns for a bounty and returns the updated row. */
@@ -115,5 +120,27 @@ export class BountiesRepository {
       .lt('review_deadline', now.toISOString());
     if (error) throw new Error(error.message);
     return (data ?? []) as BountyEntity[];
+  }
+
+  /**
+   * Fetches submission counts for a list of bounty IDs in a single query.
+   * Counts only registrations where deliverable_id IS NOT NULL (i.e. submitted work).
+   * Returns a map of bounty_id → count.
+   */
+  private async fetchSubmissionCounts(
+    bountyIds: string[],
+  ): Promise<Record<string, number>> {
+    const { data, error } = await this.supabase
+      .from('bounty_registrations')
+      .select('bounty_id')
+      .in('bounty_id', bountyIds)
+      .not('deliverable_id', 'is', null);
+    if (error) throw new Error(error.message);
+    const counts: Record<string, number> = {};
+    for (const row of data ?? []) {
+      const id = (row as { bounty_id: string }).bounty_id;
+      counts[id] = (counts[id] ?? 0) + 1;
+    }
+    return counts;
   }
 }
