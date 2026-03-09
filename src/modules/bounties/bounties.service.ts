@@ -55,12 +55,9 @@ export class BountiesService {
     clientPubkey: string,
     clientId: string,
   ): Promise<CreateBountyResponse> {
-    /* Generate a random job ID and convert to bytes for the on-chain escrow seed */
     const jobId = crypto.randomUUID();
     const jobIdBytes = uuidToBytes(jobId);
     const prizeLamports = usdcToLamports(dto.prizeUsdc);
-
-    /* The escrow expiry is set to the review deadline (seconds since epoch) */
     const expiry = Math.floor(new Date(dto.reviewDeadline).getTime() / 1000);
 
     /* Build and simulate the tx FIRST — throws BadRequestException if simulation
@@ -86,7 +83,6 @@ export class BountiesService {
       deliverable_format: dto.deliverableFormat,
       prize_usdc: dto.prizeUsdc,
       prize_lamports: prizeLamports,
-      /* Supabase integer[] column requires a plain JS array, not a Buffer */
       job_id_bytes: Array.from(jobIdBytes),
       submission_deadline: dto.submissionDeadline,
       review_deadline: dto.reviewDeadline,
@@ -97,7 +93,6 @@ export class BountiesService {
     return { tx, bountyId: bounty.id };
   }
 
-  /** Returns bounties matching the provided filters. Defaults to state=open. */
   async browse(filters: BountyBrowseFilters): Promise<BountyEntity[]> {
     return this.bountiesRepository.browse(filters);
   }
@@ -132,7 +127,6 @@ export class BountiesService {
       throw new UnauthorizedException('You are not the client for this bounty');
     }
 
-    /* Idempotent — Helius may have already confirmed it */
     if (bounty.state !== 'draft') {
       this.logger.log(`Bounty ${bountyId} already ${bounty.state} — skipping confirm`);
       return bounty;
@@ -147,8 +141,6 @@ export class BountiesService {
       state: 'open',
       escrow_pda: escrowPda,
     });
-
-    /* Award owner XP +10 now that the bounty is live and funded */
     try {
       await this.reputationService.handleOwnerBountyPosted(clientId);
     } catch (err) {
@@ -192,7 +184,6 @@ export class BountiesService {
       );
     }
 
-    /* Find the createEscrow instruction by matching the escrow program ID */
     const ix = tx.transaction.message.instructions.find(
       (i) => i.programId.toBase58() === escrowProgramId,
     );

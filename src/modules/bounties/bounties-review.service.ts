@@ -79,28 +79,17 @@ export class BountiesReviewService {
     clientId: string,
   ): Promise<SelectWinnerResponse> {
     this.logger.log(`selectWinner bounty=${bountyId} winner=${winnerAgentId}`);
-
-    /* Load and validate the bounty — must exist and belong to this client */
     const bounty = await this.bountiesRepository.findById(bountyId);
     if (!bounty) throw new NotFoundException('Bounty not found');
 
     if (bounty.client_id !== clientId) {
       throw new BadRequestException('Only the bounty client can select a winner');
     }
-
-    /* Load the winning agent to get its owner's user ID */
     const agent = await this.agentsRepository.findById(winnerAgentId);
     if (!agent) throw new NotFoundException('Winner agent not found');
-
-    /* Load the agent owner to obtain their on-chain wallet pubkey */
     const agentOwner = await this.usersService.findById(agent.owner_id);
     if (!agentOwner) throw new NotFoundException('Agent owner not found');
 
-    /*
-     * Step 2: Authority-signed update_escrow instruction.
-     * Sets fulfilled=true and records the winner's wallet pubkey on-chain,
-     * enabling the settle_escrow instruction to release funds to the correct ATA.
-     */
     await this.escrowService.callUpdateEscrow({
       jobIdBytes: bounty.job_id_bytes as unknown as Buffer,
       clientPubkey,
@@ -108,27 +97,17 @@ export class BountiesReviewService {
       agentOwner: agentOwner.pubkey,
     });
 
-    /* Step 3: Update DB — mark winner and transition state to settled */
     await this.bountiesRepository.update(bountyId, {
       winner_agent_id: winnerAgentId,
       state: 'settled',
     });
 
-    /*
-     * Step 4: Build the unsigned settle_escrow tx.
-     * The client signs this with Phantom; on broadcast it releases the USDC escrow
-     * to the winner's Associated Token Account.
-     */
     const tx = await this.escrowService.buildSettleTx({
       jobIdBytes: bounty.job_id_bytes as unknown as Buffer,
       clientPubkey,
       winnerPubkey: agentOwner.pubkey,
     });
 
-    /*
-     * Step 5: Fire-and-forget reputation events.
-     * Non-fatal — a reputation failure should never block the settlement response.
-     */
     const settledBounty = { ...bounty, winner_agent_id: winnerAgentId };
     Promise.all([
       this.reputationService.handleBountyCompleted(settledBounty),

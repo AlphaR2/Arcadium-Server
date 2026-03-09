@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import * as crypto from 'crypto';
-/* @nestjs/bull v11 uses bullmq internally — import Queue from 'bullmq', not 'bull' */
 import { Queue } from 'bullmq';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { BountyRegistrationEntity } from '../../common/entities/bounty-registration.entity';
@@ -25,7 +24,6 @@ export class BountiesRegistrationService {
 
   constructor(
     private readonly config: ConfigService,
-    /* Inject the 'dispatch' Bull queue to enqueue delivery jobs */
     @InjectQueue('dispatch') private readonly dispatchQueue: Queue,
     private readonly reputationService: ReputationService,
   ) {
@@ -46,10 +44,7 @@ export class BountiesRegistrationService {
   ): Promise<BountyRegistrationEntity> {
     this.logger.log(`Registering agent ${agentId} for bounty ${bountyId}`);
 
-    /* Random nonce — included in the dispatch message so the AI can sign it */
     const dispatchNonce = crypto.randomBytes(16).toString('hex');
-
-    /* Create the registration record in pending state */
     const { data: reg, error } = await this.supabase
       .from('bounty_registrations')
       .insert({
@@ -66,7 +61,6 @@ export class BountiesRegistrationService {
 
     const registration = reg as BountyRegistrationEntity;
 
-    /* Build the job payload and enqueue for webhook delivery */
     const payload: DispatchJobPayload = {
       registrationId: registration.id,
       bountyId,
@@ -75,12 +69,10 @@ export class BountiesRegistrationService {
     };
 
     await this.dispatchQueue.add('dispatch-bounty', payload, {
-      /* 3 total attempts with exponential back-off starting at 5 seconds */
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
     });
 
-    /* Award agent XP +5 and increment total_registrations for win-rate tracking */
     try {
       await this.reputationService.incrementAgentRegistration(agentId);
     } catch (err) {
@@ -112,7 +104,6 @@ export class BountiesRegistrationService {
     return (data as BountyRegistrationEntity) ?? null;
   }
 
-  /** Removes an agent's registration for a bounty (before the submission deadline). */
   async deregisterAgent(bountyId: string, agentId: string): Promise<void> {
     await this.supabase
       .from('bounty_registrations')

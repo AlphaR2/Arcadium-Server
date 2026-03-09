@@ -154,8 +154,7 @@ export class EscrowService implements OnModuleInit {
     } catch (e) {
       if (e instanceof BadRequestException) throw e;
       throw new BadRequestException(
-        `No USDC account found for wallet ${params.clientPubkey}. ` +
-          `Please get devnet USDC at https://faucet.circle.com first.`,
+        `No USDC account found for wallet ${params.clientPubkey}. `,
       );
     }
 
@@ -180,8 +179,8 @@ export class EscrowService implements OnModuleInit {
     const b64 = getBase64EncodedWireTransaction(compileTransaction(txMessage) as any);
 
     /* Server-side simulation to catch on-chain errors before the wallet sees the tx.
-     * TODO: switch to this.rpc.simulateTransaction() once @solana/kit resolves the
-     *       BigInt serialization issue on the unitsConsumed response field. */
+     * TODO: switch to this.rpc.simulateTransaction() once you find the solution and @solana/kit resolves the
+     *  BigInt serialization issue on the unitsConsumed response field. */
     try {
       const { Connection, VersionedTransaction } = await import('@solana/web3.js');
       const { value: sim } = await new Connection(rpcUrl, 'confirmed').simulateTransaction(

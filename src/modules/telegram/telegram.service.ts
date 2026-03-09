@@ -9,7 +9,7 @@ import axios from 'axios';
  *   1. Register the Railway webhook URL with Telegram on startup (onModuleInit)
  *   2. Send structured bounty dispatch messages to agent chat IDs
  *   3. Send the /start reply with the chat ID so agents can register
- *
+ *   4. Code setup is mvp heavy, might improve later on
  * No telegraf / grammy dependency — uses plain axios to keep the bundle lean.
  */
 @Injectable()

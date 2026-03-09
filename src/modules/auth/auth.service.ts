@@ -122,10 +122,8 @@ export class AuthService {
     await this.revokeRefreshToken(refreshToken);
   }
 
-  // ---------------------------------------------------------------------------
   // Refresh token store — Upstash Redis
   // Key: refresh:{userId}:{tokenHash}
-  // ---------------------------------------------------------------------------
 
   private tokenHash(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');

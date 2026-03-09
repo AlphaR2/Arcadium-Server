@@ -12,7 +12,7 @@ import { OwnerStatsEntity } from '../../common/entities/owner-stats.entity';
 import { BountyEntity } from '../../common/entities/bounty.entity';
 import { AtomService } from './atom.service';
 
-// ── Composite score weights (must sum to 1.0) ─────────────────────────────────
+// ── Composite score weights (must sum to 1.0)
 const COMPOSITE_WEIGHTS = {
   avgQuality:    0.4,
   onTimeRate:    0.2,
@@ -20,7 +20,7 @@ const COMPOSITE_WEIGHTS = {
   bountyWinRate: 0.2,
 };
 
-// ── Agent tier thresholds (checked in descending order) ───────────────────────
+// ── Agent tier thresholds (checked in descending order)
 const AGENT_TIER_THRESHOLDS = [
   { tier: 'platinum', minScore: 0.7 },
   { tier: 'gold',     minScore: 0.5 },
@@ -28,7 +28,7 @@ const AGENT_TIER_THRESHOLDS = [
   { tier: 'bronze',   minScore: 0.1 },
 ];
 
-// ── Owner tier thresholds by XP ───────────────────────────────────────────────
+// ── Owner tier thresholds by XP 
 const OWNER_TIER_THRESHOLDS = [
   { tier: 'platinum', minXp: 2000 },
   { tier: 'gold',     minXp:  800 },
@@ -36,7 +36,7 @@ const OWNER_TIER_THRESHOLDS = [
   { tier: 'bronze',   minXp:   50 },
 ];
 
-// ── XP awards per event ───────────────────────────────────────────────────────
+// ── XP awards per event 
 const XP = {
   /** Agent registered for a bounty */
   register:     5,
@@ -60,7 +60,7 @@ const XP = {
   ownerRate:    15,
 } as const;
 
-// ── Pure helper: derive agent tier from composite score + wins ─────────────────
+// ── Pure helper: derive agent tier from composite score + wins
 function deriveAgentTier(compositeScore: number, bountyWins: number): string {
   if (bountyWins === 0) return 'unranked';
   for (const { tier, minScore } of AGENT_TIER_THRESHOLDS) {
@@ -69,7 +69,7 @@ function deriveAgentTier(compositeScore: number, bountyWins: number): string {
   return 'bronze';
 }
 
-// ── Pure helper: derive owner tier from accumulated XP ────────────────────────
+// ── Pure helper: derive owner tier from accumulated XP 
 function deriveOwnerTier(xpPoints: number): string {
   for (const { tier, minXp } of OWNER_TIER_THRESHOLDS) {
     if (xpPoints >= minXp) return tier;
@@ -77,7 +77,7 @@ function deriveOwnerTier(xpPoints: number): string {
   return 'client';
 }
 
-// ── Pure helper: compute earned agent badges from stats ───────────────────────
+// ── Pure helper: compute earned agent badges from stats 
 function computeAgentBadges(s: Partial<AgentStatsEntity>): string[] {
   const badges: string[] = [];
   const wins = s.bounty_wins ?? 0;
@@ -93,7 +93,7 @@ function computeAgentBadges(s: Partial<AgentStatsEntity>): string[] {
   return badges;
 }
 
-// ── Pure helper: compute earned owner badges from stats ───────────────────────
+// ── Pure helper: compute earned owner badges from stats 
 function computeOwnerBadges(s: Partial<OwnerStatsEntity>): string[] {
   const badges: string[] = [];
   if ((s.bounties_posted ?? 0) >= 10)      badges.push('active_client');
@@ -140,7 +140,7 @@ export class ReputationService {
     });
   }
 
-  // ── Agent events ─────────────────────────────────────────────────────────────
+  // ── Agent events 
 
   /**
    * Called when an agent registers for a bounty.
@@ -238,7 +238,7 @@ export class ReputationService {
     await this.atomService.writeBountyFeedback(bounty as unknown as Record<string, unknown>);
   }
 
-  // ── Owner events ─────────────────────────────────────────────────────────────
+  // ── Owner events 
 
   /**
    * Called when a bounty transitions to 'open' (escrow confirmed).
@@ -308,7 +308,7 @@ export class ReputationService {
     );
   }
 
-  // ── Composite score, leaderboards, tier, badges ───────────────────────────────
+  // ── Composite score, leaderboards, tier, badges 
 
   /**
    * Reads latest agent_stats, applies the COMPOSITE_WEIGHTS formula, derives tier
@@ -400,7 +400,7 @@ export class ReputationService {
     return entries ?? [];
   }
 
-  // ── Stats getters ─────────────────────────────────────────────────────────────
+  // ── Stats getters 
 
   /** Returns the full agent_stats row for the given agent UUID. */
   async getAgentStats(agentId: string): Promise<AgentStatsEntity> {
@@ -422,7 +422,7 @@ export class ReputationService {
     return (data ?? {}) as OwnerStatsEntity;
   }
 
-  // ── Rating submission ─────────────────────────────────────────────────────────
+  // ── Rating submission 
 
   /**
    * Submits a quality rating for a winning agent's deliverable.
@@ -525,7 +525,7 @@ export class ReputationService {
     return { ok: true };
   }
 
-  // ── Private helpers ───────────────────────────────────────────────────────────
+  // ── Private helpers 
 
   private async loadAgentStats(agentId: string): Promise<Partial<AgentStatsEntity>> {
     const { data } = await this.supabase

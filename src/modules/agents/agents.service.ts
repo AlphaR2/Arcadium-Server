@@ -127,24 +127,16 @@ export class AgentsService implements OnModuleInit {
     ownerId: string,
   ): Promise<AgentRegistrationResponse> {
     this.logger.log(`registerAgent for owner ${ownerPubkey}`);
-
-    /* Step 1: Try to crawl MCP capabilities — non-fatal on null return or throw */
     const crawler = new this.EndpointCrawlerClass(8000);
     let mcpCapabilities: Record<string, unknown> = {};
     try {
       const mcp = await crawler.fetchMcpCapabilities(dto.webhookUrl);
-      /* fetchMcpCapabilities returns null when the URL has no MCP endpoint — guard it */
       if (mcp) {
         mcpCapabilities = mcp as unknown as Record<string, unknown>;
       }
     } catch {
       this.logger.warn(`MCP capability crawl failed for ${dto.webhookUrl}, continuing`);
     }
-
-    /*
-     * Step 2: Declare services — only add A2A/MCP when a webhookUrl is provided.
-     * Agents using Telegram or polling mode have no public HTTP endpoint to advertise.
-     */
     const services: { type: unknown; value: string }[] = [];
     if (dto.webhookUrl) {
       services.push({ type: this.ServiceType.A2A, value: dto.webhookUrl });
@@ -177,18 +169,12 @@ export class AgentsService implements OnModuleInit {
       skills: oasfSkills,
       domains: oasfDomains,
     });
-
-    /* Step 3: Upload metadata to IPFS and form the token URI */
     const cid = await this.ipfs.addJson(metadata);
     const tokenUri = `ipfs://${cid}`;
-
-    /* Step 4: Generate asset keypair — the public key is the future 8004 NFT address */
     const assetKeypair = Keypair.generate();
     const assetPubkey = assetKeypair.publicKey.toBase58();
 
     const ownerPubkeyObj = new PublicKey(ownerPubkey);
-
-    /* Step 5: Build unsigned registerAgent tx in skipSend mode for Phantom */
     const prepared = await this.sdk.registerAgent(tokenUri, {
       skipSend: true,
       signer: ownerPubkeyObj,
@@ -213,23 +199,18 @@ export class AgentsService implements OnModuleInit {
 
     let signedTxBase64: string;
     try {
-      /* v0 / VersionedTransaction path */
       const vtx = VersionedTransaction.deserialize(rawTxBuffer);
       vtx.sign([assetKeypair]);
       signedTxBase64 = Buffer.from(vtx.serialize()).toString('base64');
     } catch {
-      /* Legacy Transaction fallback */
       const ltx = Transaction.from(rawTxBuffer);
       ltx.partialSign(assetKeypair);
       signedTxBase64 = ltx.serialize({ requireAllSignatures: false }).toString('base64');
     }
 
-    /* Step 6: Generate secrets for webhook verification and AI submission auth */
     const webhookSecret = crypto.randomBytes(32).toString('hex');
-    /* agt_ prefix makes it easy to spot and revoke in logs/configs */
     const agentToken = `agt_${crypto.randomBytes(32).toString('hex')}`;
 
-    /* Step 7: Persist the pending agent record */
     const agent = await this.agentsRepository.create({
       owner_id: ownerId,
       name: dto.name,
@@ -244,18 +225,15 @@ export class AgentsService implements OnModuleInit {
       health_status: 'pending',
     });
 
-    /* Step 8: Store the pending asset pubkey so Helius can match the confirmation event */
     await this.agentsRepository.setPendingAsset(agent.id, assetPubkey);
 
     this.logger.log(`Agent ${agent.id} created, pending asset ${assetPubkey}`);
 
     return {
       agentId: agent.id,
-      /* Partially signed by assetKeypair — mobile wallet adds the owner signature */
       tx: signedTxBase64,
       webhookSecret,
       assetPubkey,
-      /* Share this with your AI — required in every submission footer block */
       agentToken,
     };
   }
@@ -271,18 +249,15 @@ export class AgentsService implements OnModuleInit {
   ): Promise<ConfirmRegistrationResponse> {
     const agent = await this.agentsRepository.findById(agentId);
     if (!agent) throw new BadRequestException('Agent not found');
-
-    /* Ownership guard — only the agent owner can confirm registration */
     if (agent.owner_id !== ownerId) throw new BadRequestException('Forbidden');
 
     const pendingPubkey = new PublicKey(agent.pending_asset_pubkey!);
     if (!pendingPubkey) return { confirmed: false };
 
     try {
-      /* Query the 8004 SDK to verify the NFT exists on-chain */
+    
       const exists = await this.sdk.agentExists(pendingPubkey);
       if (exists) {
-        /* Promote from pending to confirmed — clear pending key, set final key */
         await this.agentsRepository.update(agentId, {
           asset_pubkey: pendingPubkey.toBase58(),
           pending_asset_pubkey: null,
@@ -297,22 +272,18 @@ export class AgentsService implements OnModuleInit {
     return { confirmed: false };
   }
 
-  /** Returns all agents matching optional category and health status filters. */
   async browse(filters: { category?: string; healthStatus?: string }): Promise<AgentEntity[]> {
     return this.agentsRepository.browse(filters);
   }
 
-  /** Returns a single agent by UUID. Throws if not found. */
   async findById(id: string): Promise<AgentEntity> {
     return this.agentsRepository.findById(id);
   }
 
-  /** Returns all agents owned by the given user UUID, including pending ones. */
   async findByOwner(ownerId: string): Promise<AgentEntity[]> {
     return this.agentsRepository.findByOwnerId(ownerId);
   }
 
-  /** Updates mutable agent fields. Only supplied DTO fields are written to the DB. */
   async update(id: string, dto: UpdateAgentDto): Promise<AgentEntity> {
     return this.agentsRepository.update(id, dto as Record<string, unknown>);
   }
@@ -348,12 +319,9 @@ export class AgentsService implements OnModuleInit {
 
     const agent = await this.agentsRepository.findById(agentId);
     if (!agent) throw new BadRequestException('Agent not found');
-
-    /* Agent has no on-chain identity yet — cannot health-check */
     if (!agent.asset_pubkey) return { status: 'unregistered' };
 
     try {
-      /* sdk.isItAlive returns { status: 'live' | 'partially' | 'not_live' } */
       const report = await this.sdk.isItAlive(new PublicKey(agent.asset_pubkey));
       const status =
         report.status === 'live'
