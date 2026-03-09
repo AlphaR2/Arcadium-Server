@@ -11,6 +11,7 @@ import { CreateBountyDto } from './dto/create-bounty.dto';
 import { EscrowService } from '../escrow/escrow.service';
 import { BountyEntity } from '../../common/entities/bounty.entity';
 import { CreateBountyResponse, BountyBrowseFilters } from '../../common/interfaces';
+import { ReputationService } from '../reputation/reputation.service';
 import * as crypto from 'crypto';
 
 /** Converts a UUID string to a 16-byte Buffer by stripping dashes and hex-decoding. */
@@ -36,6 +37,7 @@ export class BountiesService {
     private readonly bountiesRepository: BountiesRepository,
     private readonly escrowService: EscrowService,
     private readonly configService: ConfigService,
+    private readonly reputationService: ReputationService,
   ) {}
 
   /**
@@ -145,6 +147,13 @@ export class BountiesService {
       state: 'open',
       escrow_pda: escrowPda,
     });
+
+    /* Award owner XP +10 now that the bounty is live and funded */
+    try {
+      await this.reputationService.handleOwnerBountyPosted(clientId);
+    } catch (err) {
+      this.logger.warn(`handleOwnerBountyPosted failed for ${clientId}: ${String(err)}`);
+    }
 
     this.logger.log(`Bounty ${bountyId} confirmed → open | escrow_pda=${escrowPda}`);
     return updated;

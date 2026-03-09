@@ -49,11 +49,11 @@ async function bootstrap() {
   /* Global logging interceptor — logs method, URL, and response time for every request */
   app.useGlobalInterceptors(new LoggingInterceptor());
 
-  /* -----------------------------------------------------------------------
+  /*
    * Swagger / OpenAPI
    * Enabled in all environments for now — disable in production once the
    * mobile app is fully consuming the API.
-   * ----------------------------------------------------------------------- */
+   **/
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Envoy API')
     .setDescription(

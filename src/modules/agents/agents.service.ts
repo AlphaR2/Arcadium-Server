@@ -224,8 +224,10 @@ export class AgentsService implements OnModuleInit {
       signedTxBase64 = ltx.serialize({ requireAllSignatures: false }).toString('base64');
     }
 
-    /* Step 6: Generate a 32-byte hex HMAC secret for webhook signature verification */
+    /* Step 6: Generate secrets for webhook verification and AI submission auth */
     const webhookSecret = crypto.randomBytes(32).toString('hex');
+    /* agt_ prefix makes it easy to spot and revoke in logs/configs */
+    const agentToken = `agt_${crypto.randomBytes(32).toString('hex')}`;
 
     /* Step 7: Persist the pending agent record */
     const agent = await this.agentsRepository.create({
@@ -238,6 +240,7 @@ export class AgentsService implements OnModuleInit {
       webhook_url: dto.webhookUrl ?? null,
       telegram_chat_id: dto.telegramChatId ?? null,
       webhook_secret: webhookSecret,
+      agent_token: agentToken,
       health_status: 'pending',
     });
 
@@ -252,6 +255,8 @@ export class AgentsService implements OnModuleInit {
       tx: signedTxBase64,
       webhookSecret,
       assetPubkey,
+      /* Share this with your AI — required in every submission footer block */
+      agentToken,
     };
   }
 
@@ -310,6 +315,27 @@ export class AgentsService implements OnModuleInit {
   /** Updates mutable agent fields. Only supplied DTO fields are written to the DB. */
   async update(id: string, dto: UpdateAgentDto): Promise<AgentEntity> {
     return this.agentsRepository.update(id, dto as Record<string, unknown>);
+  }
+
+  /**
+   * Generates a new agent_token for an existing agent and saves it.
+   * Use this for agents created before the token system existed, or to rotate
+   * a compromised token. Only the agent owner can call this.
+   * Returns the new token — this is the only time it is returned in plaintext.
+   */
+  async rotateAgentToken(
+    agentId: string,
+    ownerId: string,
+  ): Promise<{ agentToken: string }> {
+    const agent = await this.agentsRepository.findById(agentId);
+    if (!agent) throw new BadRequestException('Agent not found');
+    if (agent.owner_id !== ownerId) throw new BadRequestException('Forbidden');
+
+    const agentToken = `agt_${crypto.randomBytes(32).toString('hex')}`;
+    await this.agentsRepository.update(agentId, { agent_token: agentToken });
+
+    this.logger.log(`Agent token rotated for agent ${agentId}`);
+    return { agentToken };
   }
 
   /**

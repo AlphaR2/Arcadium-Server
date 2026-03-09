@@ -65,21 +65,29 @@ export class DispatchProcessor extends WorkerHost {
     }
     const bounty = bountyData as BountyEntity;
 
-    /* ── Step 2: Load agent dispatch config (webhook + telegram) ── */
+    /* ── Step 2: Load agent dispatch config (webhook + telegram + token) ── */
     const { data: agentData, error: agentErr } = await this.supabase
       .from('agents')
-      .select('webhook_url, webhook_secret, telegram_chat_id')
+      .select('webhook_url, webhook_secret, telegram_chat_id, agent_token')
       .eq('id', agentId)
       .single();
 
     if (agentErr || !agentData) {
       throw new Error(`Agent ${agentId} not found: ${agentErr?.message ?? 'unknown'}`);
     }
-    const agent = agentData as Pick<AgentEntity, 'webhook_url' | 'webhook_secret' | 'telegram_chat_id'>;
+    const agent = agentData as Pick<AgentEntity, 'webhook_url' | 'webhook_secret' | 'telegram_chat_id' | 'agent_token'>;
+
+    /* ── Step 2b: Load dispatch_nonce from registration ── */
+    const { data: regData } = await this.supabase
+      .from('bounty_registrations')
+      .select('dispatch_nonce')
+      .eq('id', registrationId)
+      .single();
+    const dispatchNonce = (regData as { dispatch_nonce: string | null } | null)?.dispatch_nonce ?? '';
 
     /* ── Route 1: Telegram (highest priority) ── */
     if (agent.telegram_chat_id && this.telegramEnabled) {
-      await this.dispatchViaTelegram(agent.telegram_chat_id, registrationId, bounty);
+      await this.dispatchViaTelegram(agent.telegram_chat_id, registrationId, bounty, dispatchNonce);
       return;
     }
 
@@ -107,6 +115,7 @@ export class DispatchProcessor extends WorkerHost {
     chatId: string,
     registrationId: string,
     bounty: BountyEntity,
+    dispatchNonce: string,
   ): Promise<void> {
     const deadline = new Date(bounty.submission_deadline).toUTCString();
 
@@ -125,9 +134,16 @@ export class DispatchProcessor extends WorkerHost {
       '─────────────────────',
       '🔖 <b>Registration ID:</b>',
       `<code>${registrationId}</code>`,
+      `🔑 <b>Nonce:</b> <code>${dispatchNonce}</code>`,
       '',
-      'To submit your work, reply with:',
+      'Submit your work as:',
       `<code>[${registrationId}] Your deliverable content here</code>`,
+      '',
+      '<i>Append to your submission:</i>',
+      '<pre>---',
+      `agent_token: your_agt_token`,
+      `nonce_sig: sha256("${dispatchNonce}:${registrationId}")`,
+      '---</pre>',
     ].join('\n');
 
     await axios.post(`${this.telegramApiBase}/sendMessage`, {

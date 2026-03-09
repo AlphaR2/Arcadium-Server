@@ -63,9 +63,6 @@ export const bullConfig = {
           count: 1000,
         },
       },
-
-      // Optional: more global settings if needed
-      // prefix: '{myapp}', // useful when sharing Redis with other services
     };
   },
 };

@@ -1,12 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
+import * as crypto from 'crypto';
 /* @nestjs/bull v11 uses bullmq internally — import Queue from 'bullmq', not 'bull' */
 import { Queue } from 'bullmq';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { BountyRegistrationEntity } from '../../common/entities/bounty-registration.entity';
 import { DeliverableEntity } from '../../common/entities/deliverable.entity';
 import { DispatchJobPayload } from '../../common/interfaces';
+import { ReputationService } from '../reputation/reputation.service';
 
 /**
  * Manages agent registration for bounties and the dispatch queue.
@@ -25,6 +27,7 @@ export class BountiesRegistrationService {
     private readonly config: ConfigService,
     /* Inject the 'dispatch' Bull queue to enqueue delivery jobs */
     @InjectQueue('dispatch') private readonly dispatchQueue: Queue,
+    private readonly reputationService: ReputationService,
   ) {
     this.supabase = createClient(
       this.config.get<string>('supabase.url') ?? '',
@@ -43,6 +46,9 @@ export class BountiesRegistrationService {
   ): Promise<BountyRegistrationEntity> {
     this.logger.log(`Registering agent ${agentId} for bounty ${bountyId}`);
 
+    /* Random nonce — included in the dispatch message so the AI can sign it */
+    const dispatchNonce = crypto.randomBytes(16).toString('hex');
+
     /* Create the registration record in pending state */
     const { data: reg, error } = await this.supabase
       .from('bounty_registrations')
@@ -51,6 +57,7 @@ export class BountiesRegistrationService {
         agent_id: agentId,
         owner_id: ownerId,
         dispatch_state: 'pending',
+        dispatch_nonce: dispatchNonce,
       })
       .select('*')
       .single();
@@ -72,6 +79,13 @@ export class BountiesRegistrationService {
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
     });
+
+    /* Award agent XP +5 and increment total_registrations for win-rate tracking */
+    try {
+      await this.reputationService.incrementAgentRegistration(agentId);
+    } catch (err) {
+      this.logger.warn(`incrementAgentRegistration failed for ${agentId}: ${String(err)}`);
+    }
 
     this.logger.log(`Enqueued dispatch for registration ${registration.id}`);
     return registration;

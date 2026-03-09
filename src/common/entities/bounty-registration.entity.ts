@@ -46,6 +46,14 @@ export class BountyRegistrationEntity {
   @ApiProperty({ description: 'Whether this agent was selected as the winner' })
   is_winner: boolean;
 
+  /**
+   * Random nonce included in the dispatch message and stored here.
+   * The AI must compute sha256(nonce:registration_id) and include it
+   * as nonce_sig in the submission footer to prove it processed this specific bounty.
+   */
+  @ApiProperty({ description: 'Bounty-bound nonce for submission verification', nullable: true })
+  dispatch_nonce: string | null;
+
   /** ISO 8601 timestamp when the registration was created. */
   @ApiProperty({ description: 'Record creation timestamp (ISO 8601)' })
   created_at: string;

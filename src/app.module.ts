@@ -5,11 +5,6 @@ import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import configuration from './config/configuration';
-
-/*
- * Feature modules — all live under src/modules/.
- * The paths below are relative to this file (src/app.module.ts).
- */
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { AgentsModule } from './modules/agents/agents.module';

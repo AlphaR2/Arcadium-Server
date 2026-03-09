@@ -10,7 +10,49 @@ import {
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import * as crypto from 'crypto';
 import { TelegramService } from './telegram.service';
+
+/**
+ * Parses the AI submission footer block from raw message content.
+ *
+ * Expected format at the end of the message:
+ *   ---
+ *   agent_token: agt_abc123...
+ *   nonce_sig: <hex>
+ *   ---
+ *
+ * Returns the deliverable content (footer stripped) plus the parsed fields.
+ * If no footer is present, content is the full raw string and meta fields are undefined.
+ */
+function parseSubmissionFooter(raw: string): {
+  content: string;
+  agentToken?: string;
+  nonceSig?: string;
+} {
+  const FOOTER_RE = /\n---\n([\s\S]+?)\n---\s*$/;
+  const match = FOOTER_RE.exec(raw);
+  if (!match) return { content: raw };
+
+  const content = raw.slice(0, raw.length - match[0].length).trim();
+  const meta: Record<string, string> = {};
+  for (const line of match[1].split('\n')) {
+    const colon = line.indexOf(':');
+    if (colon === -1) continue;
+    meta[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+  }
+
+  return {
+    content,
+    agentToken: meta['agent_token'],
+    nonceSig: meta['nonce_sig'],
+  };
+}
+
+/** Computes the expected nonce_sig the AI should have produced. */
+function expectedNonceSig(nonce: string, registrationId: string): string {
+  return crypto.createHash('sha256').update(`${nonce}:${registrationId}`).digest('hex');
+}
 
 /**
  * Minimal Telegram Update shape — only the fields we need.
@@ -123,10 +165,10 @@ export class TelegramController {
   ): Promise<void> {
     this.logger.log(`Processing Telegram submission for registration ${registrationId}`);
 
-    /* Step 1: Load the registration + agent + bounty in one join */
+    /* Step 1: Load the registration + agent (with token) + bounty in one join */
     const { data: reg, error: regErr } = await this.supabase
       .from('bounty_registrations')
-      .select('*, agents(telegram_chat_id, id), bounties(id, deliverable_format, category)')
+      .select('*, agents(telegram_chat_id, id, agent_token), bounties(id, deliverable_format, category)')
       .eq('id', registrationId)
       .single();
 
@@ -153,7 +195,38 @@ export class TelegramController {
       return;
     }
 
-    /* Step 4: Create the deliverable record */
+    /* Step 4: Parse and validate the AI submission footer */
+    const { content: deliverableContent, agentToken, nonceSig } = parseSubmissionFooter(content);
+
+    const storedToken = reg.agents?.agent_token;
+    const storedNonce = reg.dispatch_nonce;
+
+    if (storedToken) {
+      /* Validate agent_token */
+      if (agentToken !== storedToken) {
+        this.logger.warn(`Invalid agent_token for registration ${registrationId}`);
+        await this.telegramService.send(
+          chatId,
+          '❌ Invalid agent token. Append the correct footer block to your submission.',
+        );
+        return;
+      }
+
+      /* Validate nonce_sig if a nonce was set */
+      if (storedNonce) {
+        const expected = expectedNonceSig(storedNonce, registrationId);
+        if (nonceSig !== expected) {
+          this.logger.warn(`Invalid nonce_sig for registration ${registrationId}`);
+          await this.telegramService.send(
+            chatId,
+            '❌ Invalid nonce signature. Recompute sha256(nonce:registration_id) and retry.',
+          );
+          return;
+        }
+      }
+    }
+
+    /* Step 5: Create the deliverable record */
     const { data: deliverable, error: delErr } = await this.supabase
       .from('deliverables')
       .insert({
@@ -164,8 +237,8 @@ export class TelegramController {
         deliverable_url: `telegram://chat/${chatId}/msg/${messageId}`,
         deliverable_format: reg.bounties?.deliverable_format ?? 'document',
         hosted_url: null,
-        /* Full submission text stored in notes */
-        notes: content,
+        /* Footer stripped — store only the clean deliverable content */
+        notes: deliverableContent,
       })
       .select('id')
       .single();

@@ -71,6 +71,42 @@ export class AgentStatsEntity {
   @ApiProperty({ description: 'Historical uptime fraction (0-1)' })
   uptime: number;
 
+  // ── Gamification fields 
+
+  /** Total number of bounties this agent has registered for (denominator for win_rate & completion_rate). */
+  @ApiProperty({ description: 'Total bounty registrations' })
+  total_registrations: number;
+
+  /** Total number of deliverables this agent has submitted. */
+  @ApiProperty({ description: 'Total deliverables submitted' })
+  total_submissions: number;
+
+  /** Count of deliverables submitted before the bounty deadline (used to compute on_time_rate). */
+  @ApiProperty({ description: 'Deliverables submitted before deadline' })
+  on_time_submissions: number;
+
+  /** Accumulated experience points across all events. */
+  @ApiProperty({ description: 'Total XP earned' })
+  xp_points: number;
+
+  /** Current consecutive win count — bonuses awarded at 3, 5, 10. */
+  @ApiProperty({ description: 'Current win streak' })
+  win_streak: number;
+
+  /**
+   * Agent tier derived from composite_score.
+   * Values: unranked | bronze | silver | gold | platinum
+   */
+  @ApiProperty({ description: 'Tier: unranked | bronze | silver | gold | platinum' })
+  tier: string;
+
+  /**
+   * Earned badge slugs.
+   * Possible values: first_win, hat_trick, veteran, speed_demon, consistent, five_star
+   */
+  @ApiProperty({ description: 'Earned badge slugs', type: [String] })
+  badges: string[];
+
   /** ISO 8601 timestamp of the last time this record was updated. */
   @ApiProperty({ description: 'Last update timestamp (ISO 8601)' })
   updated_at: string;

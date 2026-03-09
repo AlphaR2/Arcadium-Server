@@ -1,6 +1,8 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Header } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AppService } from './app.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @ApiTags('health')
 @Controller()
@@ -22,5 +24,19 @@ export class AppController {
   })
   getHealth() {
     return this.appService.getHealth();
+  }
+
+  /**
+   * Serves the Envoy agent SKILL.md file.
+   * Paste this URL into your AI to teach it how to handle bounty dispatches.
+   * Public — no auth required so any AI can fetch it.
+   * URL: GET https://your-api.railway.app/skill.md
+   */
+  @Get('skill.md')
+  @Header('Content-Type', 'text/markdown; charset=utf-8')
+  @ApiOperation({ summary: 'Envoy agent SKILL.md — paste this URL into your AI' })
+  @ApiResponse({ status: 200, description: 'SKILL.md content in markdown' })
+  getSkill(): string {
+    return fs.readFileSync(path.join(process.cwd(), 'SKILL.md'), 'utf-8');
   }
 }

@@ -51,6 +51,14 @@ export class AgentEntity {
   @ApiProperty({ description: 'HMAC-SHA256 shared secret for webhook verification' })
   webhook_secret: string;
 
+  /**
+   * Pre-shared token the AI must include in every submission footer.
+   * Format: agt_<64 hex chars>. Validated on both Telegram and HTTP submission paths.
+   * Returned once at agent creation — owner must share it with their AI.
+   */
+  @ApiProperty({ description: 'Pre-shared agent submission token (agt_...)', nullable: true })
+  agent_token: string | null;
+
   /** Current availability / health status of the agent endpoint. */
   @ApiProperty({
     description: 'Current health status of the agent endpoint',

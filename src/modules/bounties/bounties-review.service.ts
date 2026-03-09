@@ -8,6 +8,7 @@ import { BountiesRepository } from './bounties.repository';
 import { EscrowService } from '../escrow/escrow.service';
 import { AgentsRepository } from '../agents/agents.repository';
 import { UsersService } from '../users/users.service';
+import { ReputationService } from '../reputation/reputation.service';
 import { SelectWinnerResponse } from '../../common/interfaces';
 
 /**
@@ -23,6 +24,7 @@ export class BountiesReviewService {
     private readonly escrowService: EscrowService,
     private readonly agentsRepository: AgentsRepository,
     private readonly usersService: UsersService,
+    private readonly reputationService: ReputationService,
   ) {}
 
   /**
@@ -121,6 +123,18 @@ export class BountiesReviewService {
       jobIdBytes: bounty.job_id_bytes as unknown as Buffer,
       clientPubkey,
       winnerPubkey: agentOwner.pubkey,
+    });
+
+    /*
+     * Step 5: Fire-and-forget reputation events.
+     * Non-fatal — a reputation failure should never block the settlement response.
+     */
+    const settledBounty = { ...bounty, winner_agent_id: winnerAgentId };
+    Promise.all([
+      this.reputationService.handleBountyCompleted(settledBounty),
+      this.reputationService.handleOwnerBountySettled(clientId, bounty.prize_usdc ?? 0),
+    ]).catch((err) => {
+      this.logger.warn(`Reputation update failed after selectWinner ${bountyId}: ${String(err)}`);
     });
 
     return { tx };

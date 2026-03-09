@@ -123,4 +123,22 @@ export class AgentsController {
   healthCheck(@Param('id') id: string) {
     return this.agentsService.triggerHealthCheck(id);
   }
+
+  /**
+   * Generates a new agent_token for an existing agent.
+   * Use for agents created before the token system, or to rotate a compromised token.
+   * The new token is returned once — store it immediately and share with your AI.
+   */
+  @Post(':id/rotate-token')
+  @ApiOperation({ summary: 'Generate or rotate the agent submission token (agt_...)' })
+  @ApiParam({ name: 'id', description: 'Agent UUID', format: 'uuid' })
+  @ApiResponse({
+    status: 201,
+    description: 'New agent token — returned once, store securely',
+    schema: { properties: { agentToken: { type: 'string' } } },
+  })
+  @ApiResponse({ status: 400, description: 'Agent not found or caller is not the owner' })
+  rotateToken(@Request() req: AuthRequest, @Param('id') id: string) {
+    return this.agentsService.rotateAgentToken(id, req.user.sub);
+  }
 }

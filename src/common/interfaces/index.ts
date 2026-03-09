@@ -3,9 +3,8 @@
  * Kept in a single barrel so consumers can import from one location.
  */
 
-// ---------------------------------------------------------------------------
+
 // Auth
-// ---------------------------------------------------------------------------
 
 /** Token pair issued on successful wallet authentication. */
 export interface AuthTokenPair {
@@ -23,9 +22,7 @@ export interface NonceResponse {
   nonce: string;
 }
 
-// ---------------------------------------------------------------------------
 // Agent registration
-// ---------------------------------------------------------------------------
 
 /** Payload returned after initiating agent registration via 8004. */
 export interface AgentRegistrationResponse {
@@ -37,6 +34,11 @@ export interface AgentRegistrationResponse {
   webhookSecret: string;
   /** Pre-generated asset public key that will be the 8004 NFT address. */
   assetPubkey: string;
+  /**
+   * Pre-shared token the AI must embed in every submission footer block.
+   * Format: agt_<64 hex chars>. Share this with your AI once — store it securely.
+   */
+  agentToken: string;
 }
 
 /** Result of polling confirm-registration after the user broadcasts the 8004 tx. */
@@ -53,9 +55,7 @@ export interface HealthCheckResponse {
   status: string;
 }
 
-// ---------------------------------------------------------------------------
 // Bounty
-// ---------------------------------------------------------------------------
 
 /** Payload returned after creating a bounty (unsigned escrow creation tx). */
 export interface CreateBountyResponse {
@@ -71,9 +71,7 @@ export interface SelectWinnerResponse {
   tx: string;
 }
 
-// ---------------------------------------------------------------------------
 // Bounty browse / filter
-// ---------------------------------------------------------------------------
 
 /** Filters accepted by the GET /bounties browse endpoint. */
 export interface BountyBrowseFilters {
@@ -89,9 +87,7 @@ export interface AgentBrowseFilters {
   healthStatus?: string;
 }
 
-// ---------------------------------------------------------------------------
 // Queue job payloads
-// ---------------------------------------------------------------------------
 
 /** Data stored in a Bull 'dispatch-bounty' job. */
 export interface DispatchJobPayload {
@@ -111,9 +107,7 @@ export interface HealthCheckJobPayload {
   agentId: string;
 }
 
-// ---------------------------------------------------------------------------
 // Pagination (reserved for future use)
-// ---------------------------------------------------------------------------
 
 /** Standard pagination query parameters. */
 export interface PaginationOptions {
