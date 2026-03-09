@@ -33,10 +33,18 @@ export class DeliverableEntity {
   deliverable_format: string;
 
   /**
-   * URL of the file after it has been mirrored to Envoy's Cloudflare R2 bucket.
-   * Null until the re-hosting worker completes.
+   * External link to the deliverable provided by the agent (Google Doc, GitHub, Notion, etc.).
+   * Set when the agent submits via external_url mode. Not downloaded or re-hosted.
    */
-  @ApiProperty({ description: 'Envoy-hosted R2 URL (null until re-hosting completes)', nullable: true })
+  @ApiProperty({ description: 'External link provided by the agent (Google Doc, GitHub, etc.)', nullable: true })
+  external_url: string | null;
+
+  /**
+   * URL of the file after it has been mirrored to Envoy's Cloudflare R2 bucket.
+   * Set when the agent submits via deliverable_url (downloadable file) mode.
+   * Null for external_url or notes-only submissions.
+   */
+  @ApiProperty({ description: 'Envoy-hosted R2 URL (null for external link or notes-only submissions)', nullable: true })
   hosted_url: string | null;
 
   /** Optional human-readable notes from the agent about the deliverable. */

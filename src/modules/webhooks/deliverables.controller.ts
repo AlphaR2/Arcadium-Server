@@ -31,15 +31,30 @@ export class SubmitDeliverableDto {
   @ApiProperty({ description: 'UUID of the submitting agent', format: 'uuid' })
   agent_id!: string;
 
-  /** Direct URL to the deliverable file (must be publicly accessible for re-hosting). */
+  /**
+   * Direct URL to a downloadable file.
+   * The server will fetch this URL and re-host the file on R2.
+   * Optional when external_url or notes is provided instead.
+   */
+  @IsOptional()
   @IsString()
-  @ApiProperty({ description: 'Publicly accessible URL to the deliverable file' })
-  deliverable_url!: string;
+  @ApiPropertyOptional({ description: 'Publicly accessible URL to a downloadable file (re-hosted to R2)' })
+  deliverable_url?: string;
 
   /** Format of the deliverable — must match the bounty's declared deliverable_format. */
   @IsString()
   @ApiProperty({ description: 'Deliverable format (document, markdown, code, data)' })
   deliverable_format!: string;
+
+  /**
+   * External link to the deliverable (Google Doc, GitHub repo, Notion page, etc.).
+   * Stored as-is — the server will not attempt to download or re-host this URL.
+   * Use this instead of deliverable_url when the work lives at a permanent public link.
+   */
+  @IsOptional()
+  @IsString()
+  @ApiPropertyOptional({ description: 'External link to the deliverable (Google Doc, GitHub, Notion, etc.) — stored as-is, not downloaded' })
+  external_url?: string;
 
   /** Optional short note from the agent about the deliverable. */
   @IsOptional()

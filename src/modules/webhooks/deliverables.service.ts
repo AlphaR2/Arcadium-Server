@@ -44,13 +44,14 @@ export class DeliverablesService {
     job_id: string;
     registration_id: string;
     agent_id: string;
-    deliverable_url: string;
+    deliverable_url?: string;
     deliverable_format: string;
+    external_url?: string;
     notes?: string;
     /* AI submission verification fields */
     agent_token?: string;
     nonce_sig?: string;
-  }): Promise<{ deliverableId: string; r2Url: string }> {
+  }): Promise<{ deliverableId: string; hostedUrl: string | null }> {
     // 1. Validate registration + load agent token, nonce, and bounty deadline
     const { data: reg, error: regError } = await this.supabase
       .from('bounty_registrations')
@@ -97,39 +98,46 @@ export class DeliverablesService {
       ? new Date() <= new Date(submissionDeadline)
       : true;
 
-    // 4. Download file from agent URL
-    let fileBuffer: Buffer;
-    try {
-      const response = await axios.get<ArrayBuffer>(body.deliverable_url, {
-        responseType: 'arraybuffer',
-        timeout: 30000,
-        maxContentLength: 50 * 1024 * 1024, // 50 MB limit
-      });
-      fileBuffer = Buffer.from(response.data);
-    } catch (err) {
-      this.logger.error(
-        `Failed to download deliverable from ${body.deliverable_url}`,
-        err,
-      );
-      throw new BadRequestException('Failed to download deliverable');
+    /* 4. Resolve hosted_url based on submission mode:
+     *   a) external_url provided → link submission (Google Doc, GitHub, etc.) — store as-is
+     *   b) deliverable_url is a downloadable https:// file → download + re-host to R2
+     *   c) anything else (telegram://, notes-only, etc.) → no file, hosted_url stays null */
+    let hostedUrl: string | null = null;
+
+    if (body.external_url) {
+      // Mode a: external link — stored in its own column, not hosted_url
+      this.logger.log(`External link submission for registration ${body.registration_id}: ${body.external_url}`);
+    } else if (body.deliverable_url?.startsWith('https://')) {
+      // Mode b: downloadable file — fetch and re-host to R2
+      try {
+        const response = await axios.get<ArrayBuffer>(body.deliverable_url, {
+          responseType: 'arraybuffer',
+          timeout: 30000,
+          maxContentLength: 50 * 1024 * 1024,
+        });
+        const fileBuffer = Buffer.from(response.data);
+        const key = `deliverables/${body.agent_id}/${body.registration_id}/${Date.now()}.${body.deliverable_format}`;
+        await this.r2.upload(key, fileBuffer);
+        hostedUrl = await this.r2.getSignedUrl(key, 60 * 60 * 24 * 7);
+      } catch (err) {
+        this.logger.error(`Failed to download deliverable from ${body.deliverable_url}`, err);
+        throw new BadRequestException('Failed to download deliverable from the provided URL');
+      }
     }
+    // Mode c: non-https URL (e.g. telegram://) or notes-only — hostedUrl remains null
 
-    // 5. Upload to R2
-    const key = `deliverables/${body.agent_id}/${body.registration_id}/${Date.now()}.${body.deliverable_format}`;
-    await this.r2.upload(key, fileBuffer);
-    const r2Url = await this.r2.getSignedUrl(key, 60 * 60 * 24 * 7); // 7-day signed URL
-
-    // 6. Create deliverable record
+    // 5. Create deliverable record
     const { data: deliverable, error: delError } = await this.supabase
       .from('deliverables')
       .insert({
         bounty_id: r['bounty_id'],
         registration_id: body.registration_id,
         agent_id: body.agent_id,
-        deliverable_url: body.deliverable_url,
+        deliverable_url: body.deliverable_url ?? null,
         deliverable_format: body.deliverable_format,
-        hosted_url: r2Url,
-        notes: body.notes,
+        external_url: body.external_url ?? null,
+        hosted_url: hostedUrl,
+        notes: body.notes ?? null,
       })
       .select('id')
       .single();
@@ -150,11 +158,11 @@ export class DeliverablesService {
       .eq('id', body.registration_id);
 
     this.logger.log(
-      `Deliverable ${deliverableId} stored at ${key} for registration ` +
-        `${body.registration_id} (onTime=${wasOnTime})`,
+      `Deliverable ${deliverableId} for registration ${body.registration_id} ` +
+        `(mode=${body.external_url ? 'external_link' : body.deliverable_url?.startsWith('https://') ? 'r2_file' : 'notes_only'}, onTime=${wasOnTime})`,
     );
 
-    // 7. Update agent reputation — fire-and-forget, never blocks the response
+    // 6. Update agent reputation — fire-and-forget, never blocks the response
     this.reputationService
       .incrementAgentSubmission(body.agent_id, wasOnTime)
       .catch((err) => {
@@ -163,6 +171,6 @@ export class DeliverablesService {
         );
       });
 
-    return { deliverableId, r2Url };
+    return { deliverableId, hostedUrl };
   }
 }
